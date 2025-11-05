@@ -227,6 +227,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0dcee54a30b27ea8317ca647759b5d9701a8c7caaaa0c922c6d3c306a7278a7a"
 dependencies = [
  "anchor-lang",
+ "mpl-token-metadata",
  "spl-associated-token-account 3.0.4",
  "spl-pod 0.2.5",
  "spl-token 4.0.3",
@@ -1331,6 +1332,19 @@ dependencies = [
  "num-traits",
  "rmp-serde",
  "serde_json",
+ "solana-program",
+ "thiserror",
+]
+
+[[package]]
+name = "mpl-token-metadata"
+version = "4.1.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "caf0f61b553e424a6234af1268456972ee66c2222e1da89079242251fa7479e5"
+dependencies = [
+ "borsh 0.9.3",
+ "num-derive 0.3.3",
+ "num-traits",
  "solana-program",
  "thiserror",
 ]
