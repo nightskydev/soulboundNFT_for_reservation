@@ -10,7 +10,7 @@ use spl_token_2022::{extension::ExtensionType, instruction as token_instruction,
 declare_id!("EjZL47GfF2EfNxhwPw1vNGPPVXMDdXBVcu1JCnux5d3L");
 
 #[program]
-pub mod mpl_core_anchor_wrapper {
+pub mod soulbound_nft_for_reservation {
 
     use super::*;
 

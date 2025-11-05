@@ -1,6 +1,6 @@
 import * as anchor from "@coral-xyz/anchor";
 import { Program } from "@coral-xyz/anchor";
-import { MplCoreAnchorWrapper } from "../target/types/mpl_core_anchor_wrapper";
+import { SoulboundNftForReservation } from "../target/types/soulbound_nft_for_reservation";
 import { ASSOCIATED_PROGRAM_ID } from "@coral-xyz/anchor/dist/cjs/utils/token";
 import NodeWallet from "@coral-xyz/anchor/dist/cjs/nodewallet";
 import {
@@ -60,7 +60,7 @@ describe("extension_nft", () => {
   anchor.setProvider(provider);
 
   const program = anchor.workspace
-    .MplCoreAnchorWrapper as Program<MplCoreAnchorWrapper>;
+    .SoulboundNftForReservation as Program<SoulboundNftForReservation>;
 
   const payer = provider.wallet as anchor.Wallet;
 

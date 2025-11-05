@@ -1336,25 +1336,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "mpl-core-anchor-wrapper"
-version = "0.1.0"
-dependencies = [
- "anchor-lang",
- "anchor-spl",
- "arrayref",
- "borsh 0.10.3",
- "mpl-core",
- "mpl-utils",
- "num-derive 0.4.2",
- "num-traits",
- "solana-program",
- "spl-associated-token-account 2.3.0",
- "spl-token 3.5.0",
- "spl-token-2022 0.7.0",
- "spl-token-metadata-interface 0.2.0",
-]
-
-[[package]]
 name = "mpl-utils"
 version = "0.3.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2181,6 +2162,25 @@ dependencies = [
  "subtle",
  "thiserror",
  "zeroize",
+]
+
+[[package]]
+name = "soulbound_nft_for_reservation"
+version = "0.1.0"
+dependencies = [
+ "anchor-lang",
+ "anchor-spl",
+ "arrayref",
+ "borsh 0.10.3",
+ "mpl-core",
+ "mpl-utils",
+ "num-derive 0.4.2",
+ "num-traits",
+ "solana-program",
+ "spl-associated-token-account 2.3.0",
+ "spl-token 3.5.0",
+ "spl-token-2022 0.7.0",
+ "spl-token-metadata-interface 0.2.0",
 ]
 
 [[package]]

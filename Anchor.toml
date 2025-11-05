@@ -5,11 +5,7 @@ resolution = true
 skip-lint = false
 
 [programs.localnet]
-mpl_core_anchor_wrapper = "EjZL47GfF2EfNxhwPw1vNGPPVXMDdXBVcu1JCnux5d3L"
-
-[[test.genesis]]
-address = "CoREENxT6tW1HoK8ypY1SxRMZTcVPm7R94rH4PZNhX7d"
-program = "tests/programs/mpl_core.so"
+soulbound_nft_for_reservation = "EjZL47GfF2EfNxhwPw1vNGPPVXMDdXBVcu1JCnux5d3L"
 
 [registry]
 url = "https://api.apr.dev"

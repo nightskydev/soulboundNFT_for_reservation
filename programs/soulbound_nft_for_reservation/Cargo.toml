@@ -1,12 +1,12 @@
 [package]
-name = "mpl-core-anchor-wrapper"
+name = "soulbound_nft_for_reservation"
 version = "0.1.0"
 description = "Created with Anchor"
 edition = "2021"
 
 [lib]
 crate-type = ["cdylib", "lib"]
-name = "mpl_core_anchor_wrapper"
+name = "soulbound_nft_for_reservation"
 
 [features]
 default = []
