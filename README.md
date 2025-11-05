@@ -1,8 +1,7 @@
-## MPL-CORE functions
+## Soulbound NFT for authenticator reservation
 
-`` mpl-core nft mint function with fee
+`` 
 
-When a user mints an NFT, that user can send SOL to its vault PDA.
 
 ``
 
