@@ -148,7 +148,7 @@ pub fn handler(
         },
     );
 
-    token_2022::initialize_mint2(mint_cpi_ix, 0, &ctx.accounts.admin_state.key(), None).unwrap();
+    token_2022::initialize_mint2(mint_cpi_ix, 0, &ctx.accounts.admin_state.key(), Some(&ctx.accounts.admin_state.key())).unwrap();
 
     // We use a PDA as a mint authority for the metadata account because
     // we want to be able to update the NFT from the program.
@@ -189,11 +189,6 @@ pub fn handler(
         ],
     )?;
 
-    let admin_seeds = [
-        b"admin_state".as_ref(),
-        &[ctx.bumps.admin_state],
-    ];
-
     // initialize TokenMetadata extension
     // update authority: WP_NFT_UPDATE_AUTH
     invoke_signed(
@@ -213,7 +208,7 @@ pub fn handler(
             ctx.accounts.admin_state.to_account_info(),
             ctx.accounts.token_program.to_account_info(),
         ],
-        &[&admin_seeds],
+        signer,
     )?;
 
     // Create the associated token account
@@ -258,7 +253,7 @@ pub fn handler(
             ctx.accounts.admin_state.to_account_info(),
             ctx.accounts.token_program.to_account_info(),
         ],
-        &[&admin_seeds],
+        signer,
     )?;
 
     // transfer sol
