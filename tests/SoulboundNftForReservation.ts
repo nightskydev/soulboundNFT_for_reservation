@@ -154,8 +154,8 @@ describe("extension_nft", () => {
     try {
       let tx = await program.methods
         .mintNft(
-          "VIERBORI",
-          "VIER",
+          "Veintree",
+          "VA",
           "https://arweave.net/MHK3Iopy0GgvDoM7LkkiAdg7pQqExuuWvedApCnzfj0"
         )
         .accounts({
@@ -216,8 +216,8 @@ describe("extension_nft", () => {
     try {
       let tx = await program.methods
         .burnAndMintNewNft(
-          "VIERBORI",
-          "VIER",
+          "Veintree",
+          "VA",
           "https://arweave.net/MHK3Iopy0GgvDoM7LkkiAdg7pQqExuuWvedApCnzfj0"
         )
         .accounts({
