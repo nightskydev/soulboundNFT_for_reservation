@@ -92,7 +92,7 @@ pub fn handler(
     )?;
 
     // initialize MintCloseAuthority extension
-    // authority: Position account (PDA)
+    // authority: admin_state account (PDA)
     invoke(
         &spl_token_2022::instruction::initialize_mint_close_authority(
             ctx.accounts.token_program.key,
@@ -243,18 +243,22 @@ pub fn handler(
         1,
     )?;
 
-    // Freeze the mint authority so no more tokens can be minted to make it an NFT
-    token_2022::set_authority(
-        CpiContext::new_with_signer(
+    // remove mint authority
+    invoke_signed(
+        &spl_token_2022::instruction::set_authority(
+            ctx.accounts.token_program.key,
+            ctx.accounts.mint.to_account_info().key,
+            Option::None,
+            AuthorityType::MintTokens,
+            ctx.accounts.admin_state.to_account_info().key,
+            &[ctx.accounts.admin_state.to_account_info().key],
+        )?,
+        &[
+            ctx.accounts.mint.to_account_info(),
+            ctx.accounts.admin_state.to_account_info(),
             ctx.accounts.token_program.to_account_info(),
-            token_2022::SetAuthority {
-                current_authority: ctx.accounts.admin_state.to_account_info(),
-                account_or_mint: ctx.accounts.mint.to_account_info(),
-            },
-            signer,
-        ),
-        AuthorityType::MintTokens,
-        None,
+        ],
+        &[&admin_seeds],
     )?;
 
     // transfer sol

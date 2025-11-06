@@ -82,32 +82,8 @@ pub fn handler(ctx: Context<MintNft>, name: String, symbol: String, uri: String)
         &[],
     )?;
 
-    // system_program::create_account(
-    //     CpiContext::new(
-    //         ctx.accounts.token_program.to_account_info(),
-    //         system_program::CreateAccount {
-    //             from: ctx.accounts.signer.to_account_info(),
-    //             to: ctx.accounts.mint.to_account_info(),
-    //         },
-    //     ),
-    //     lamports_required,
-    //     space as u64,
-    //     &ctx.accounts.token_program.key(),
-    // )?;
-
-    // // Assign the mint to the token program
-    // system_program::assign(
-    //     CpiContext::new(
-    //         ctx.accounts.token_program.to_account_info(),
-    //         system_program::Assign {
-    //             account_to_assign: ctx.accounts.mint.to_account_info(),
-    //         },
-    //     ),
-    //     &token_2022::ID,
-    // )?;
-
     // initialize MintCloseAuthority extension
-    // authority: Position account (PDA)
+    // authority: admin_state account (PDA)
     invoke(
         &spl_token_2022::instruction::initialize_mint_close_authority(
             ctx.accounts.token_program.key,
@@ -275,18 +251,22 @@ pub fn handler(ctx: Context<MintNft>, name: String, symbol: String, uri: String)
         1,
     )?;
 
-    // Freeze the mint authority so no more tokens can be minted to make it an NFT
-    token_2022::set_authority(
-        CpiContext::new_with_signer(
+    // remove mint authority
+    invoke_signed(
+        &spl_token_2022::instruction::set_authority(
+            ctx.accounts.token_program.key,
+            ctx.accounts.mint.to_account_info().key,
+            Option::None,
+            AuthorityType::MintTokens,
+            ctx.accounts.admin_state.to_account_info().key,
+            &[ctx.accounts.admin_state.to_account_info().key],
+        )?,
+        &[
+            ctx.accounts.mint.to_account_info(),
+            ctx.accounts.admin_state.to_account_info(),
             ctx.accounts.token_program.to_account_info(),
-            token_2022::SetAuthority {
-                current_authority: ctx.accounts.admin_state.to_account_info(),
-                account_or_mint: ctx.accounts.mint.to_account_info(),
-            },
-            signer
-        ),
-        AuthorityType::MintTokens,
-        None,
+        ],
+        &[&admin_seeds],
     )?;
 
     // transfer sol
