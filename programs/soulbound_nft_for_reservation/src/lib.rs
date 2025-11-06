@@ -4,8 +4,10 @@ use anchor_lang::prelude::*;
 
 pub mod error;
 pub mod state;
+pub mod utils;
 pub mod instructions;
 
+pub use utils::*;
 pub use instructions::*;
 
 pub use crate::error::ProgramErrorCode;
