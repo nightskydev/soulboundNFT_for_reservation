@@ -1,12 +1,19 @@
-use anchor_lang::{prelude::*, system_program};
+use anchor_lang::prelude::*;
 use anchor_spl::{
     associated_token::{self, AssociatedToken}, token_2022, token_2022::Burn, token_interface::{spl_token_2022::instruction::AuthorityType, Token2022}
 };
 use solana_program::program::{invoke, invoke_signed};
-use spl_token_2022::{extension::ExtensionType, instruction as token_instruction, state::Mint};
+use anchor_spl::token_2022::spl_token_2022::{
+    self, extension::ExtensionType,
+};
+use anchor_spl::token_2022_extensions::spl_token_metadata_interface;
+use anchor_spl::token_2022::spl_token_2022::extension::{
+    BaseStateWithExtensions, StateWithExtensions,
+};
 
 use crate::state::*;
 use crate::error::ProgramErrorCode;
+use crate::utils::safe_create_account;
 
 
 #[derive(Accounts)]
@@ -56,47 +63,32 @@ pub fn handler(
 ) -> Result<()> {
     msg!("Mint nft with meta data extension and additional meta data");
 
-    let space = ExtensionType::get_account_len::<Mint>(&[
+    let space = ExtensionType::try_calculate_account_len::<spl_token_2022::state::Mint>(&[
         ExtensionType::MintCloseAuthority,
         ExtensionType::NonTransferable,
         ExtensionType::MetadataPointer,
-    ]);
+    ])?;
 
     // This is the space required for the metadata account.
     // We put the meta data into the mint account at the end so we
     // don't need to create and additional account.
-    let meta_data_space = 250;
-
-    let lamports_required = (Rent::get()?).minimum_balance(space + meta_data_space);
+    let lamports = (Rent::get()?).minimum_balance(space);
 
     msg!(
         "Create Mint and metadata account size and cost: {} lamports: {}",
         space as u64,
-        lamports_required
+        lamports
     );
 
-    system_program::create_account(
-        CpiContext::new(
-            ctx.accounts.token_program.to_account_info(),
-            system_program::CreateAccount {
-                from: ctx.accounts.signer.to_account_info(),
-                to: ctx.accounts.mint.to_account_info(),
-            },
-        ),
-        lamports_required,
-        space as u64,
+        // create account
+    safe_create_account(
+        ctx.accounts.system_program.to_account_info(),
+        ctx.accounts.signer.to_account_info(),
+        ctx.accounts.mint.to_account_info(),
         &ctx.accounts.token_program.key(),
-    )?;
-
-    // Assign the mint to the token program
-    system_program::assign(
-        CpiContext::new(
-            ctx.accounts.token_program.to_account_info(),
-            system_program::Assign {
-                account_to_assign: ctx.accounts.mint.to_account_info(),
-            },
-        ),
-        &token_2022::ID,
+        lamports,
+        space as u64,
+        &[],
     )?;
 
     // initialize MintCloseAuthority extension
@@ -136,7 +128,7 @@ pub fn handler(
 
     // Initialize the Non Transferable Mint Extension
     invoke(
-        &token_instruction::initialize_non_transferable_mint(
+        &spl_token_2022::instruction::initialize_non_transferable_mint(
             ctx.accounts.token_program.key,
             ctx.accounts.mint.key,
         )
@@ -163,31 +155,65 @@ pub fn handler(
     let seeds = b"admin_state";
     let bump = ctx.bumps.admin_state;
     let signer: &[&[&[u8]]] = &[&[seeds, &[bump]]];
+    
+    let metadata = spl_token_metadata_interface::state::TokenMetadata {
+        name,
+        symbol,
+        uri,
+        ..Default::default()
+    };
+
+    // we need to add rent for TokenMetadata extension to reallocate space
+    let token_mint_data = ctx.accounts.mint.try_borrow_data()?;
+    let token_mint_unpacked =
+        StateWithExtensions::<spl_token_2022::state::Mint>::unpack(&token_mint_data)?;
+    let new_account_len = token_mint_unpacked
+        .try_get_new_account_len_for_variable_len_extension::<spl_token_metadata_interface::state::TokenMetadata>(&metadata)?;
+
+    let new_rent_exempt_minimum = Rent::get()?.minimum_balance(new_account_len);
+    let additional_rent = new_rent_exempt_minimum.saturating_sub(ctx.accounts.mint.lamports());
+    drop(token_mint_data); // CPI call will borrow the account data
 
     msg!(
         "Init metadata {0}",
         ctx.accounts.admin_state.to_account_info().key
     );
 
-    // Init the metadata account
-    let init_token_meta_data_ix = &spl_token_metadata_interface::instruction::initialize(
-        &spl_token_2022::id(),
-        ctx.accounts.mint.key,
-        ctx.accounts.admin_state.to_account_info().key,
-        ctx.accounts.mint.key,
-        ctx.accounts.admin_state.to_account_info().key,
-        name,
-        symbol,
-        uri,
-    );
-
-    invoke_signed(
-        init_token_meta_data_ix,
+    // transfer additional rent
+    invoke(
+        &anchor_lang::solana_program::system_instruction::transfer(ctx.accounts.signer.key, ctx.accounts.mint.key, additional_rent),
         &[
-            ctx.accounts.mint.to_account_info().clone(),
-            ctx.accounts.admin_state.to_account_info().clone(),
+            ctx.accounts.signer.to_account_info(),
+            ctx.accounts.mint.to_account_info(),
+            ctx.accounts.system_program.to_account_info(),
         ],
-        signer,
+    )?;
+
+    let admin_seeds = [
+        b"admin_state".as_ref(),
+        &[ctx.bumps.admin_state],
+    ];
+
+    // initialize TokenMetadata extension
+    // update authority: WP_NFT_UPDATE_AUTH
+    invoke_signed(
+        &spl_token_metadata_interface::instruction::initialize(
+            ctx.accounts.token_program.key,
+            ctx.accounts.mint.key,
+            ctx.accounts.admin_state.to_account_info().key,
+            ctx.accounts.mint.key,
+            &ctx.accounts.admin_state.to_account_info().key(),
+            metadata.name,
+            metadata.symbol,
+            metadata.uri,
+        ),
+        &[
+            ctx.accounts.mint.to_account_info(),
+            ctx.accounts.admin_state.to_account_info(),
+            ctx.accounts.admin_state.to_account_info(),
+            ctx.accounts.token_program.to_account_info(),
+        ],
+        &[&admin_seeds],
     )?;
 
     // Create the associated token account
