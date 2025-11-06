@@ -57,6 +57,7 @@ pub fn handler(
     msg!("Mint nft with meta data extension and additional meta data");
 
     let space = ExtensionType::get_account_len::<Mint>(&[
+        ExtensionType::MintCloseAuthority,
         ExtensionType::NonTransferable,
         ExtensionType::MetadataPointer,
     ]);
@@ -96,6 +97,21 @@ pub fn handler(
             },
         ),
         &token_2022::ID,
+    )?;
+
+    // initialize MintCloseAuthority extension
+    // authority: Position account (PDA)
+    invoke(
+        &spl_token_2022::instruction::initialize_mint_close_authority(
+            ctx.accounts.token_program.key,
+            ctx.accounts.mint.key,
+            Some(&ctx.accounts.admin_state.key()),
+        )?,
+        &[
+            ctx.accounts.mint.to_account_info(),
+            ctx.accounts.admin_state.to_account_info(),
+            ctx.accounts.token_program.to_account_info(),
+        ],
     )?;
 
     // Initialize the metadata pointer (Need to do this before initializing the mint)
@@ -263,16 +279,16 @@ pub fn handler(
     invoke_signed(
         &spl_token_2022::instruction::close_account(
             ctx.accounts.token_program.key,
-            ctx.accounts.mint.to_account_info().key,
+            ctx.accounts.old_mint.to_account_info().key,
             ctx.accounts.signer.key,
-            &ctx.accounts.signer.key(),
+            &ctx.accounts.admin_state.key(),
             &[],
         )?,
         &[
             ctx.accounts.token_program.to_account_info(),
-            ctx.accounts.mint.to_account_info(),
+            ctx.accounts.old_mint.to_account_info(),
             ctx.accounts.signer.to_account_info(),
-            ctx.accounts.signer.to_account_info(),
+            ctx.accounts.admin_state.to_account_info(),
         ],
         signer,
     )?;
