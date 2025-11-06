@@ -88,34 +88,33 @@ pub fn handler(ctx: Context<CreateSoulboundNFT>, name: String, symbol: String, u
         ],
     )?;
 
-        // TokenMetadata extension requires MetadataPointer extension to be initialized
-            // initialize MetadataPointer extension
-        // authority: None
-        invoke(
-            &spl_token_2022::extension::metadata_pointer::instruction::initialize(
-                ctx.accounts.token_program.key,
-                ctx.accounts.mint.key,
-                None,
-                Some(ctx.accounts.mint.key()),
-            )?,
-            &[
-                ctx.accounts.mint.to_account_info(),
-                ctx.accounts.admin_state.to_account_info(),
-                ctx.accounts.token_program.to_account_info(),
-            ],
-        )?;
+    // TokenMetadata extension requires MetadataPointer extension to be initialized
+        // initialize MetadataPointer extension
+    invoke(
+        &spl_token_2022::extension::metadata_pointer::instruction::initialize(
+            ctx.accounts.token_program.key,
+            ctx.accounts.mint.key,
+            Some(ctx.accounts.admin_state.key()),
+            Some(ctx.accounts.mint.key()),
+        )?,
+        &[
+            ctx.accounts.mint.to_account_info(),
+            ctx.accounts.admin_state.to_account_info(),
+            ctx.accounts.token_program.to_account_info(),
+        ],
+    )?;
 
-        // initialize NonTransferable extension
-        invoke(
-            &spl_token_2022::instruction::initialize_non_transferable_mint(
-                ctx.accounts.token_program.key,
-                ctx.accounts.mint.key,
-            )?,
-            &[
-                ctx.accounts.mint.to_account_info(),
-                ctx.accounts.token_program.to_account_info(),
-            ],
-        )?;
+    // initialize NonTransferable extension
+    invoke(
+        &spl_token_2022::instruction::initialize_non_transferable_mint(
+            ctx.accounts.token_program.key,
+            ctx.accounts.mint.key,
+        )?,
+        &[
+            ctx.accounts.mint.to_account_info(),
+            ctx.accounts.token_program.to_account_info(),
+        ],
+    )?;
 
     // initialize Mint
     // mint authority: Position account (PDA) (will be removed in the transaction)
@@ -166,8 +165,8 @@ pub fn handler(ctx: Context<CreateSoulboundNFT>, name: String, symbol: String, u
         ],
     )?;
 
-        let admin_seeds = [
-        b"position".as_ref(),
+    let admin_seeds = [
+        b"admin_state".as_ref(),
         &[ctx.bumps.admin_state],
     ];
 

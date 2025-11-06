@@ -242,6 +242,41 @@ pub fn handler(
         1,
     )?;
 
+    // Close user account
+    invoke(
+        &spl_token_2022::instruction::close_account(
+            ctx.accounts.token_program.key,
+            ctx.accounts.old_token_account.to_account_info().key,
+            ctx.accounts.signer.key,
+            ctx.accounts.signer.key,
+            &[],
+        )?,
+        &[
+            ctx.accounts.token_program.to_account_info(),
+            ctx.accounts.old_token_account.to_account_info(),
+            ctx.accounts.signer.to_account_info(),
+            ctx.accounts.signer.to_account_info(),
+        ],
+    )?;
+
+    // Close mint
+    invoke_signed(
+        &spl_token_2022::instruction::close_account(
+            ctx.accounts.token_program.key,
+            ctx.accounts.mint.to_account_info().key,
+            ctx.accounts.signer.key,
+            &ctx.accounts.signer.key(),
+            &[],
+        )?,
+        &[
+            ctx.accounts.token_program.to_account_info(),
+            ctx.accounts.mint.to_account_info(),
+            ctx.accounts.signer.to_account_info(),
+            ctx.accounts.signer.to_account_info(),
+        ],
+        signer,
+    )?;
+
     // store user's info - nft address
     ctx.accounts.user_state.nft_address = ctx.accounts.mint.key();
 

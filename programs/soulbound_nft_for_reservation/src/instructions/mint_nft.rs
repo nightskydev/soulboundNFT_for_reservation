@@ -46,11 +46,13 @@ pub fn handler(ctx: Context<MintNft>, name: String, symbol: String, uri: String)
     msg!("Mint nft with meta data extension and additional meta data");
 
     let space = ExtensionType::get_account_len::<Mint>(&[
-        ExtensionType::NonTransferable, 
-        ExtensionType::MetadataPointer]);
-    
-    // This is the space required for the metadata account. 
-    // We put the meta data into the mint account at the end so we 
+        ExtensionType::MintCloseAuthority,
+        ExtensionType::NonTransferable,
+        ExtensionType::MetadataPointer,
+    ]);
+
+    // This is the space required for the metadata account.
+    // We put the meta data into the mint account at the end so we
     // don't need to create and additional account. 
     let meta_data_space = 250;
 
@@ -84,6 +86,21 @@ pub fn handler(ctx: Context<MintNft>, name: String, symbol: String, uri: String)
             },
         ),
         &token_2022::ID,
+    )?;
+
+    // initialize MintCloseAuthority extension
+    // authority: Position account (PDA)
+    invoke(
+        &spl_token_2022::instruction::initialize_mint_close_authority(
+            ctx.accounts.token_program.key,
+            ctx.accounts.mint.key,
+            Some(&ctx.accounts.admin_state.key()),
+        )?,
+        &[
+            ctx.accounts.mint.to_account_info(),
+            ctx.accounts.admin_state.to_account_info(),
+            ctx.accounts.token_program.to_account_info(),
+        ],
     )?;
 
     // Initialize the metadata pointer (Need to do this before initializing the mint)
