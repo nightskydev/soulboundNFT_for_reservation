@@ -22,7 +22,7 @@ pub struct UpdateAdminInfo<'info> {
 }
 
 pub fn handler(ctx: Context<UpdateAdminInfo>, mint_fee: u64) -> Result<()> {
-    ctx.accounts.admin_state.admin = *ctx.accounts.new_admin.key;
-    ctx.accounts.admin_state.mint_fee = mint_fee;
+    ctx.accounts.admin_state.admin = *ctx.accounts.new_admin.key; // update new admin
+    ctx.accounts.admin_state.mint_fee = mint_fee; // update mint fee in lamports
     Ok(())
 }

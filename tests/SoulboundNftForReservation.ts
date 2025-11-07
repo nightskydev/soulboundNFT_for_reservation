@@ -84,6 +84,17 @@ describe("extension_nft", () => {
 
       console.log("Init admin tx", tx);
       await anchor.getProvider().connection.confirmTransaction(tx, "confirmed");
+      const adminStateAccount = await program.account.adminState.fetch(
+        adminState[0]
+      );
+      console.log(
+        "Admin state mint fee",
+        adminStateAccount.mintFee.toNumber()
+      );
+      console.log(
+        "Admin state current reserved count",
+        adminStateAccount.currentReservedCount.toNumber()
+      );
     } catch (err) {
       console.log(err);
     }
@@ -174,6 +185,15 @@ describe("extension_nft", () => {
         .rpc({ skipPreflight: true });
 
       console.log("Mint nft tx", tx);
+      await anchor.getProvider().connection.confirmTransaction(tx, "confirmed");
+
+      const adminStateAccount = await program.account.adminState.fetch(
+        adminState[0]
+      );
+      console.log(
+        "Admin state current reserved count",
+        adminStateAccount.currentReservedCount.toNumber()
+      );
       await anchor.getProvider().connection.confirmTransaction(tx, "confirmed");
     } catch (err) {
       console.log(err);

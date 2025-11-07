@@ -1,18 +1,18 @@
 use anchor_lang::prelude::*;
-use anchor_spl::{
-    associated_token::{self, AssociatedToken}, token_2022, token_interface::{spl_token_2022::instruction::AuthorityType, Token2022}
-};
-use solana_program::program::{invoke, invoke_signed};
-use anchor_spl::token_2022::spl_token_2022::{
-    self, extension::ExtensionType,
-};
-use anchor_spl::token_2022_extensions::spl_token_metadata_interface;
 use anchor_spl::token_2022::spl_token_2022::extension::{
     BaseStateWithExtensions, StateWithExtensions,
 };
+use anchor_spl::token_2022::spl_token_2022::{self, extension::ExtensionType};
+use anchor_spl::token_2022_extensions::spl_token_metadata_interface;
+use anchor_spl::{
+    associated_token::{self, AssociatedToken},
+    token_2022,
+    token_interface::{spl_token_2022::instruction::AuthorityType, Token2022},
+};
+use solana_program::program::{invoke, invoke_signed};
 
-use crate::state::*;
 use crate::error::ProgramErrorCode;
+use crate::state::*;
 use crate::utils::safe_create_account;
 
 #[derive(Accounts)]
@@ -29,12 +29,13 @@ pub struct MintNft<'info> {
     pub mint: Signer<'info>,
     pub rent: Sysvar<'info, Rent>,
     pub associated_token_program: Program<'info, AssociatedToken>,
-    #[account(  
+    #[account(
+        mut,
         seeds = [b"admin_state".as_ref()],
         bump,
         constraint = admin_state.admin == admin.key()
     )]
-    pub admin_state: Account<'info, AdminState >,
+    pub admin_state: Account<'info, AdminState>,
     #[account(
         init_if_needed,
         seeds = [b"user_state".as_ref(), signer.key().as_ref()],
@@ -48,7 +49,6 @@ pub struct MintNft<'info> {
     pub admin: AccountInfo<'info>,
 }
 
-
 pub fn handler(ctx: Context<MintNft>, name: String, symbol: String, uri: String) -> Result<()> {
     msg!("Mint nft with meta data extension and additional meta data");
 
@@ -60,7 +60,7 @@ pub fn handler(ctx: Context<MintNft>, name: String, symbol: String, uri: String)
 
     // This is the space required for the metadata account.
     // We put the meta data into the mint account at the end so we
-    // don't need to create and additional account. 
+    // don't need to create and additional account.
 
     let lamports = Rent::get()?.minimum_balance(space);
 
@@ -69,7 +69,6 @@ pub fn handler(ctx: Context<MintNft>, name: String, symbol: String, uri: String)
         space as u64,
         lamports
     );
-
 
     // create account
     safe_create_account(
@@ -98,37 +97,39 @@ pub fn handler(ctx: Context<MintNft>, name: String, symbol: String, uri: String)
     )?;
 
     // Initialize the metadata pointer (Need to do this before initializing the mint)
-    let init_meta_data_pointer_ix = 
-    match spl_token_2022::extension::metadata_pointer::instruction::initialize(
-        &Token2022::id(),
-        &ctx.accounts.mint.key(),
-        Some(ctx.accounts.admin_state.key()),
-        Some(ctx.accounts.mint.key()),
-    ) {
-        Ok(ix) => ix,
-        Err(_) => return err!(ProgramErrorCode::CantInitializeMetadataPointer)
-    };
+    let init_meta_data_pointer_ix =
+        match spl_token_2022::extension::metadata_pointer::instruction::initialize(
+            &Token2022::id(),
+            &ctx.accounts.mint.key(),
+            Some(ctx.accounts.admin_state.key()),
+            Some(ctx.accounts.mint.key()),
+        ) {
+            Ok(ix) => ix,
+            Err(_) => return err!(ProgramErrorCode::CantInitializeMetadataPointer),
+        };
 
-    
     invoke(
         &init_meta_data_pointer_ix,
         &[
             ctx.accounts.mint.to_account_info(),
-            ctx.accounts.admin_state.to_account_info()
+            ctx.accounts.admin_state.to_account_info(),
         ],
     )?;
 
     // Initialize the Non Transferable Mint Extension
     invoke(
-        &spl_token_2022::instruction::initialize_non_transferable_mint(ctx.accounts.token_program.key, ctx.accounts.mint.key)
-            .unwrap(),
+        &spl_token_2022::instruction::initialize_non_transferable_mint(
+            ctx.accounts.token_program.key,
+            ctx.accounts.mint.key,
+        )
+        .unwrap(),
         &[
             ctx.accounts.mint.to_account_info(),
             ctx.accounts.token_program.to_account_info(),
             ctx.accounts.system_program.to_account_info(),
         ],
     )?;
-    
+
     // Initialize the mint cpi
     let mint_cpi_ix = CpiContext::new(
         ctx.accounts.token_program.to_account_info(),
@@ -141,10 +142,11 @@ pub fn handler(ctx: Context<MintNft>, name: String, symbol: String, uri: String)
         mint_cpi_ix,
         0,
         &ctx.accounts.admin_state.key(),
-        Some(&ctx.accounts.admin_state.key())
-    ).unwrap();
+        Some(&ctx.accounts.admin_state.key()),
+    )
+    .unwrap();
 
-    // We use a PDA as a mint authority for the metadata account because 
+    // We use a PDA as a mint authority for the metadata account because
     // we want to be able to update the NFT from the program.
     let seeds = b"admin_state";
     let bump = ctx.bumps.admin_state;
@@ -168,11 +170,18 @@ pub fn handler(ctx: Context<MintNft>, name: String, symbol: String, uri: String)
     let additional_rent = new_rent_exempt_minimum.saturating_sub(ctx.accounts.mint.lamports());
     drop(token_mint_data); // CPI call will borrow the account data
 
-    msg!("Init metadata {0}", ctx.accounts.admin_state.to_account_info().key);
+    msg!(
+        "Init metadata {0}",
+        ctx.accounts.admin_state.to_account_info().key
+    );
 
     // transfer additional rent
     invoke(
-        &anchor_lang::solana_program::system_instruction::transfer(ctx.accounts.signer.key, ctx.accounts.mint.key, additional_rent),
+        &anchor_lang::solana_program::system_instruction::transfer(
+            ctx.accounts.signer.key,
+            ctx.accounts.mint.key,
+            additional_rent,
+        ),
         &[
             ctx.accounts.signer.to_account_info(),
             ctx.accounts.mint.to_account_info(),
@@ -218,10 +227,8 @@ pub fn handler(ctx: Context<MintNft>, name: String, symbol: String, uri: String)
     //     signer
     // )?;
 
-    
     // Create the associated token account
-    associated_token::create(
-        CpiContext::new(
+    associated_token::create(CpiContext::new(
         ctx.accounts.associated_token_program.to_account_info(),
         associated_token::Create {
             payer: ctx.accounts.signer.to_account_info(),
@@ -242,7 +249,7 @@ pub fn handler(ctx: Context<MintNft>, name: String, symbol: String, uri: String)
                 to: ctx.accounts.token_account.to_account_info(),
                 authority: ctx.accounts.admin_state.to_account_info(),
             },
-            signer
+            signer,
         ),
         1,
     )?;
@@ -291,6 +298,12 @@ pub fn handler(ctx: Context<MintNft>, name: String, symbol: String, uri: String)
 
     // store user's info - nft address
     ctx.accounts.user_state.nft_address = ctx.accounts.mint.key();
+
+    ctx.accounts.admin_state.current_reserved_count += 1; // increment reserved count
+    msg!(
+        "Current reserved count: {}",
+        ctx.accounts.admin_state.current_reserved_count
+    );
 
     Ok(())
 }

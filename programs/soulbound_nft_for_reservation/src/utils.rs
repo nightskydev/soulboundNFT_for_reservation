@@ -2,6 +2,7 @@ use anchor_lang::prelude::*;
 use solana_program::{program::invoke_signed, system_instruction};
 use std::cmp::max;
 
+// create account 
 pub fn safe_create_account<'info>(
     system_program: AccountInfo<'info>,
     funder: AccountInfo<'info>,

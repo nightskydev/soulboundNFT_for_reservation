@@ -24,8 +24,9 @@ pub struct InitAdmin<'info> {
 
 pub fn handler(ctx: Context<InitAdmin>, mint_fee: u64) -> Result<()> {
     ctx.accounts.admin_state.admin = *ctx.accounts.admin.key; // admin wallet address
-    ctx.accounts.admin_state.mint_fee = mint_fee; //
+    ctx.accounts.admin_state.mint_fee = mint_fee; // mint fee in lamports
     ctx.accounts.admin_state.bump = ctx.bumps.admin_state; // need to store bump for generate seeds
+    ctx.accounts.admin_state.current_reserved_count = 0; // initialize reserved count
 
     Ok(())
 }
