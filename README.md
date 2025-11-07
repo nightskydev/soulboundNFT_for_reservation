@@ -20,3 +20,5 @@ rustc 1.89.0-nightly (4d08223c0 2025-05-31)
 Calculate correct data size 
 
 Think about group - not important for our use case
+
+Don't need to worry about FT mark(instead of NFT) - it is related to NonTransferrable Extension
