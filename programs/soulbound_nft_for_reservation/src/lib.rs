@@ -12,7 +12,7 @@ pub use instructions::*;
 
 pub use crate::error::ProgramErrorCode;
 
-declare_id!("GDAGgvSCTWSpByvVGj6wV5WQwh2V5LW2DwwyF4c9zHBF");
+declare_id!("H1frppnuiTXeGNk34HmcRtuK3SDUokpGK3az76JjNzYe");
 
 #[program]
 pub mod soulbound_nft_for_reservation {

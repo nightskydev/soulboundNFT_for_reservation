@@ -22,3 +22,7 @@ Calculate correct data size
 Think about group - not important for our use case
 
 Don't need to worry about FT mark(instead of NFT) - it is related to NonTransferrable Extension
+
+Need to add withdraw_fee function - will be different (SOL/SPL payment) 
+
+No need to check previous_admin vs new_admin - because this update_admin function updates all info at once including mint_fee
