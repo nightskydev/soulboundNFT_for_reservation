@@ -17,6 +17,7 @@ import {
   Commitment,
   SYSVAR_RENT_PUBKEY,
 } from "@solana/web3.js";
+import assert from "assert"
 
 const privateKey = [
   82, 247, 200, 106, 74, 119, 140, 98, 199, 109, 171, 71, 72, 213, 247, 103,
@@ -259,6 +260,64 @@ describe("extension_nft", () => {
 
       console.log("Mint nft tx", tx);
       await anchor.getProvider().connection.confirmTransaction(tx, "confirmed");
+    } catch (err) {
+      console.log(err);
+    }
+  });
+
+  it("Burn nft!", async () => {
+    // Use current user_state nft as the old mint to burn
+    let adminState = await anchor.web3.PublicKey.findProgramAddress(
+      [Buffer.from("admin_state")],
+      program.programId
+    );
+
+    let userState = await anchor.web3.PublicKey.findProgramAddress(
+      [Buffer.from("user_state"), person.publicKey.toBuffer()],
+      program.programId
+    );
+
+    const userStateAccount = await program.account.userState.fetch(userState[0]);
+    const oldMint = userStateAccount.nftAddress;
+
+    const oldTokenAccount = getAssociatedTokenAddressSync(
+      oldMint,
+      person.publicKey,
+      false,
+      TOKEN_2022_PROGRAM_ID,
+      ASSOCIATED_TOKEN_PROGRAM_ID
+    );
+
+    // fetch adminState before burn
+    const adminStateBefore = await program.account.adminState.fetch(adminState[0]);
+    const reservedBefore = adminStateBefore.currentReservedCount.toNumber();
+
+    try {
+      // use untyped access because the generated TS types may be out-of-date
+      let tx = await program.methods
+        .burnNft()
+        .accounts({
+          signer: person.publicKey,
+          oldMint,
+          oldTokenAccount,
+        })
+        .signers([person])
+        .rpc({ skipPreflight: true });
+
+      console.log("Burn nft tx", tx);
+      await anchor.getProvider().connection.confirmTransaction(tx, "confirmed");
+
+      // fetch user state and ensure nft_address reset to default (zero pubkey)
+      const updatedUserState = await program.account.userState.fetch(userState[0]);
+      console.log("Updated user_state nft_address:", updatedUserState.nftAddress.toBase58());
+      const zero = new PublicKey(new Uint8Array(32));
+      assert.strictEqual(updatedUserState.nftAddress.toBase58(), zero.toBase58());
+
+      // fetch adminState after burn and check currentReservedCount decreased by 1
+      const adminStateAfter = await program.account.adminState.fetch(adminState[0]);
+      const reservedAfter = adminStateAfter.currentReservedCount.toNumber();
+      console.log(`currentReservedCount before: ${reservedBefore}, after: ${reservedAfter}`);
+      assert.strictEqual(reservedAfter, reservedBefore - 1);
     } catch (err) {
       console.log(err);
     }

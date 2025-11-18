@@ -12,7 +12,7 @@ pub use instructions::*;
 
 pub use crate::error::ProgramErrorCode;
 
-declare_id!("3L8dan8dcE1Vur7xD8JC9yACSsE8hpg38uQbLuGWU7kU");
+declare_id!("GDAGgvSCTWSpByvVGj6wV5WQwh2V5LW2DwwyF4c9zHBF");
 
 #[program]
 pub mod soulbound_nft_for_reservation {
@@ -28,6 +28,10 @@ pub mod soulbound_nft_for_reservation {
 
     pub fn mint_nft(ctx: Context<MintNft>, name: String, symbol: String, uri: String) -> Result<()> {
         instructions::mint_nft::handler(ctx, name, symbol, uri)
+    }
+
+    pub fn burn_nft(ctx: Context<BurnNft>) -> Result<()> {
+        instructions::burn_nft::handler(ctx)
     }
 
     pub fn burn_and_mint_new_nft(ctx: Context<BurnAndMintNewNft>, name: String, symbol: String, uri: String) -> Result<()> {

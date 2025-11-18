@@ -5,13 +5,13 @@ resolution = true
 skip-lint = false
 
 [programs.localnet]
-soulbound_nft_for_reservation = "3L8dan8dcE1Vur7xD8JC9yACSsE8hpg38uQbLuGWU7kU"
+soulbound_nft_for_reservation = "GDAGgvSCTWSpByvVGj6wV5WQwh2V5LW2DwwyF4c9zHBF"
 
 [registry]
 url = "https://api.apr.dev"
 
 [provider]
-cluster = "localnet"
+cluster = "devnet"
 wallet = "~/.config/solana/id.json"
 
 [scripts]
