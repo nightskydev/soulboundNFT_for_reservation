@@ -142,15 +142,18 @@ pub fn handler(
 
     // Initialize the metadata pointer (Need to do this before initializing the mint)
     let init_meta_data_pointer_ix =
-        spl_token_2022::extension::metadata_pointer::instruction::initialize(
+        match spl_token_2022::extension::metadata_pointer::instruction::initialize(
             &Token2022::id(),
             &ctx.accounts.mint.key(),
             Some(ctx.accounts.admin_state.key()),
             Some(ctx.accounts.mint.key()),
-        ).map_err(|_| {
-            cleanup_new_mint(&ctx).unwrap();
-            ProgramErrorCode::CantInitializeMetadataPointer
-        })?;
+        ) {
+            Ok(ix) => ix,
+            Err(_) => {
+                cleanup_new_mint(&ctx)?;
+                return err!(ProgramErrorCode::CantInitializeMetadataPointer);
+            }
+        };
 
     invoke(
         &init_meta_data_pointer_ix,
