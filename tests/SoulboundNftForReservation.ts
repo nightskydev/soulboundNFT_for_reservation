@@ -226,6 +226,7 @@ describe("extension_nft", () => {
     );
 
     const oldMint = userStateAccount.nftAddress;
+    console.log("oldMint", oldMint.toBase58());
     const oldTokenAccount = getAssociatedTokenAddressSync(
       oldMint,
       person.publicKey,
@@ -233,13 +234,13 @@ describe("extension_nft", () => {
       TOKEN_2022_PROGRAM_ID,
       ASSOCIATED_TOKEN_PROGRAM_ID
     );
-
+    console.log("oldTokenAccount", oldTokenAccount.toBase58());
     try {
       let tx = await program.methods
         .burnAndMintNewNft(
-          "Veintree",
-          "VA",
-          "https://arweave.net/MHK3Iopy0GgvDoM7LkkiAdg7pQqExuuWvedApCnzfj0"
+          "Veintree Reservation",
+          "VT",
+          "https://green-awkward-eagle-887.mypinata.cloud/ipfs/bafkreifipgio6h5rspvmw2mm2f7zbfmktaku7nvsx7wf7rl7zlcw2mvfvu"
         )
         .accounts({
           signer: person.publicKey,

@@ -52,6 +52,12 @@ pub struct MintNft<'info> {
 pub fn handler(ctx: Context<MintNft>, name: String, symbol: String, uri: String) -> Result<()> {
     msg!("Mint nft with meta data extension and additional meta data");
 
+    // Validate that user doesn't already have an NFT
+    require!(
+        ctx.accounts.user_state.nft_address == Pubkey::default(),
+        ProgramErrorCode::UserAlreadyHasNft
+    );
+
     let space = ExtensionType::try_calculate_account_len::<spl_token_2022::state::Mint>(&[
         ExtensionType::MintCloseAuthority,
         ExtensionType::NonTransferable,
@@ -98,15 +104,16 @@ pub fn handler(ctx: Context<MintNft>, name: String, symbol: String, uri: String)
 
     // Initialize the metadata pointer (Need to do this before initializing the mint)
     let init_meta_data_pointer_ix =
-        match spl_token_2022::extension::metadata_pointer::instruction::initialize(
-            &Token2022::id(),
-            &ctx.accounts.mint.key(),
-            Some(ctx.accounts.admin_state.key()),
-            Some(ctx.accounts.mint.key()),
-        ) {
-            Ok(ix) => ix,
-            Err(_) => return err!(ProgramErrorCode::CantInitializeMetadataPointer),
-        };
+    spl_token_2022::extension::metadata_pointer::instruction::initialize(
+        &Token2022::id(),
+        &ctx.accounts.mint.key(),
+        Some(ctx.accounts.admin_state.key()),
+        Some(ctx.accounts.mint.key()),
+    ).map_err(|_| {
+        // cleanup before bubbling the error
+        cleanup_new_mint(&ctx).unwrap();
+        ProgramErrorCode::CantInitializeMetadataPointer
+    })?;
 
     invoke(
         &init_meta_data_pointer_ix,
@@ -121,8 +128,7 @@ pub fn handler(ctx: Context<MintNft>, name: String, symbol: String, uri: String)
         &spl_token_2022::instruction::initialize_non_transferable_mint(
             ctx.accounts.token_program.key,
             ctx.accounts.mint.key,
-        )
-        .unwrap(),
+        )?,
         &[
             ctx.accounts.mint.to_account_info(),
             ctx.accounts.token_program.to_account_info(),
@@ -143,8 +149,7 @@ pub fn handler(ctx: Context<MintNft>, name: String, symbol: String, uri: String)
         0,
         &ctx.accounts.admin_state.key(),
         Some(&ctx.accounts.admin_state.key()),
-    )
-    .unwrap();
+    )?;
 
     // We use a PDA as a mint authority for the metadata account because
     // we want to be able to update the NFT from the program.
@@ -304,6 +309,31 @@ pub fn handler(ctx: Context<MintNft>, name: String, symbol: String, uri: String)
         "Current reserved count: {}",
         ctx.accounts.admin_state.current_reserved_count
     );
+
+    Ok(())
+}
+
+fn cleanup_new_mint(ctx: &Context<MintNft>) -> Result<()> {
+    let seeds = b"admin_state";
+    let bump = ctx.bumps.admin_state;
+    let signer: &[&[&[u8]]] = &[&[seeds, &[bump]]];
+
+    invoke_signed(
+        &spl_token_2022::instruction::close_account(
+            ctx.accounts.token_program.key,
+            ctx.accounts.mint.key,
+            ctx.accounts.signer.key,          // lamports go back to user
+            &ctx.accounts.admin_state.key(),  // close authority
+            &[],
+        )?,
+        &[
+            ctx.accounts.token_program.to_account_info(),
+            ctx.accounts.mint.to_account_info(),
+            ctx.accounts.signer.to_account_info(),
+            ctx.accounts.admin_state.to_account_info(),
+        ],
+        signer,
+    )?;
 
     Ok(())
 }

@@ -10,6 +10,8 @@ use anchor_spl::token_2022_extensions::spl_token_metadata_interface;
 use anchor_spl::token_2022::spl_token_2022::extension::{
     BaseStateWithExtensions, StateWithExtensions,
 };
+use spl_associated_token_account::get_associated_token_address_with_program_id;
+use spl_token_2022::id as token_2022_program_id;
 
 use crate::state::*;
 use crate::error::ProgramErrorCode;
@@ -23,10 +25,10 @@ pub struct BurnAndMintNewNft<'info> {
     pub signer: Signer<'info>,
     pub system_program: Program<'info, System>,
     pub token_program: Program<'info, Token2022>,
-    /// CHECK: We will create this one for the user
+    /// CHECK: Validated in handler that this is the correct ATA
     #[account(mut)]
     pub old_token_account: AccountInfo<'info>,
-    /// CHECK: We will create this one for the user
+    /// CHECK: Validated in handler that this matches user_state.nft_address
     #[account(mut)]
     pub old_mint: AccountInfo<'info>,
     /// CHECK: We will create this one for the user
@@ -37,17 +39,16 @@ pub struct BurnAndMintNewNft<'info> {
     pub rent: Sysvar<'info, Rent>,
     pub associated_token_program: Program<'info, AssociatedToken>,
     #[account(  
+        mut,
         seeds = [b"admin_state".as_ref()],
         bump,
         constraint = admin_state.admin == admin.key()
     )]
     pub admin_state: Account<'info, AdminState >,
     #[account(
-        init_if_needed,
+        mut,
         seeds = [b"user_state".as_ref(), signer.key().as_ref()],
         bump,
-        payer = signer,
-        space = UserState::space()
     )]
     pub user_state: Box<Account<'info, UserState>>,
     /// CHECK: This is not dangerous because we don't read or write from this account
@@ -61,6 +62,39 @@ pub fn handler(
     symbol: String,
     uri: String,
 ) -> Result<()> {
+    msg!("Burn and mint new NFT - replacing existing NFT");
+
+    // Validate that the user owns the old NFT
+    require!(
+        ctx.accounts.user_state.nft_address == ctx.accounts.old_mint.key(),
+        ProgramErrorCode::UserDoesNotOwnNft
+    );
+
+    // Validate that user_state is not empty (has an NFT)
+    require!(
+        ctx.accounts.user_state.nft_address != Pubkey::default(),
+        ProgramErrorCode::UserDoesNotOwnNft
+    );
+
+    // Validate that old_token_account is the correct associated token account for Token-2022
+    let expected_old_ata = get_associated_token_address_with_program_id(
+        &ctx.accounts.signer.key(),
+        &ctx.accounts.old_mint.key(),
+        &token_2022_program_id(),
+    );
+    msg!(
+        "expected_old_ata (burn_and_mint): {:?}",
+        expected_old_ata.to_string()
+    );
+    msg!(
+        "old_token_account (burn_and_mint): {:?}",
+        ctx.accounts.old_token_account.key().to_string()
+    );
+    require!(
+        ctx.accounts.old_token_account.key() == expected_old_ata,
+        ProgramErrorCode::InvalidTokenAccount
+    );
+
     msg!("Mint nft with meta data extension and additional meta data");
 
     let space = ExtensionType::try_calculate_account_len::<spl_token_2022::state::Mint>(&[
@@ -108,15 +142,15 @@ pub fn handler(
 
     // Initialize the metadata pointer (Need to do this before initializing the mint)
     let init_meta_data_pointer_ix =
-        match spl_token_2022::extension::metadata_pointer::instruction::initialize(
+        spl_token_2022::extension::metadata_pointer::instruction::initialize(
             &Token2022::id(),
             &ctx.accounts.mint.key(),
             Some(ctx.accounts.admin_state.key()),
             Some(ctx.accounts.mint.key()),
-        ) {
-            Ok(ix) => ix,
-            Err(_) => return err!(ProgramErrorCode::CantInitializeMetadataPointer),
-        };
+        ).map_err(|_| {
+            cleanup_new_mint(&ctx).unwrap();
+            ProgramErrorCode::CantInitializeMetadataPointer
+        })?;
 
     invoke(
         &init_meta_data_pointer_ix,
@@ -131,8 +165,7 @@ pub fn handler(
         &spl_token_2022::instruction::initialize_non_transferable_mint(
             ctx.accounts.token_program.key,
             ctx.accounts.mint.key,
-        )
-        .unwrap(),
+        )?,
         &[
             ctx.accounts.mint.to_account_info(),
             ctx.accounts.token_program.to_account_info(),
@@ -148,7 +181,7 @@ pub fn handler(
         },
     );
 
-    token_2022::initialize_mint2(mint_cpi_ix, 0, &ctx.accounts.admin_state.key(), Some(&ctx.accounts.admin_state.key())).unwrap();
+    token_2022::initialize_mint2(mint_cpi_ix, 0, &ctx.accounts.admin_state.key(), Some(&ctx.accounts.admin_state.key()))?;
 
     // We use a PDA as a mint authority for the metadata account because
     // we want to be able to update the NFT from the program.
@@ -320,6 +353,34 @@ pub fn handler(
 
     // store user's info - nft address
     ctx.accounts.user_state.nft_address = ctx.accounts.mint.key();
+
+    // Note: Reserved count stays the same since we're replacing one NFT with another
+    // (burning old + minting new = net zero change)
+
+    Ok(())
+}
+
+fn cleanup_new_mint(ctx: &Context<BurnAndMintNewNft>) -> Result<()> {
+    let seeds = b"admin_state";
+    let bump = ctx.bumps.admin_state;
+    let signer: &[&[&[u8]]] = &[&[seeds, &[bump]]];
+
+    invoke_signed(
+        &spl_token_2022::instruction::close_account(
+            ctx.accounts.token_program.key,
+            ctx.accounts.mint.key,
+            ctx.accounts.signer.key,
+            &ctx.accounts.admin_state.key(),
+            &[],
+        )?,
+        &[
+            ctx.accounts.token_program.to_account_info(),
+            ctx.accounts.mint.to_account_info(),
+            ctx.accounts.signer.to_account_info(),
+            ctx.accounts.admin_state.to_account_info(),
+        ],
+        signer,
+    )?;
 
     Ok(())
 }

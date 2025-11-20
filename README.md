@@ -23,6 +23,6 @@ Think about group - not important for our use case
 
 Don't need to worry about FT mark(instead of NFT) - it is related to NonTransferrable Extension
 
-Need to add withdraw_fee function - will be different (SOL/SPL payment) 
+Need to add withdraw_fee function - will be different (SOL/SPL payment) - Not needed because we send mint_fee to admin wallet directly.
 
 No need to check previous_admin vs new_admin - because this update_admin function updates all info at once including mint_fee
