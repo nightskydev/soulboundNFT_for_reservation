@@ -25,7 +25,7 @@ pub struct UpdateAdminInfo<'info> {
 pub fn handler(ctx: Context<UpdateAdminInfo>, mint_fee: u64) -> Result<()> {
     // Validate that new_admin is not a system program
     require!(
-        &ctx.accounts.new_admin.key() != &anchor_lang::solana_program::system_program::id(),
+        ctx.accounts.new_admin.key() != anchor_lang::solana_program::system_program::id(),
         ProgramErrorCode::InvalidAdminAccount
     );
 
