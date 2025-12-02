@@ -8,15 +8,15 @@ use crate::state::*;
 
 #[derive(Accounts)]
 pub struct Withdraw<'info> {
-    /// Admin who can withdraw funds
+    /// Super admin who can withdraw funds
     #[account(mut)]
-    pub admin: Signer<'info>,
+    pub super_admin: Signer<'info>,
 
     #[account(
         mut,
         seeds = [b"admin_state".as_ref()],
         bump,
-        constraint = admin_state.admin == admin.key() @ ProgramErrorCode::Unauthorized
+        constraint = admin_state.super_admin == super_admin.key() @ ProgramErrorCode::Unauthorized
     )]
     pub admin_state: Account<'info, AdminState>,
 

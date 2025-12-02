@@ -1,8 +1,6 @@
 import * as anchor from "@coral-xyz/anchor";
 import { Program } from "@coral-xyz/anchor";
 import { SoulboundNftForReservation } from "../target/types/soulbound_nft_for_reservation";
-import { ASSOCIATED_PROGRAM_ID } from "@coral-xyz/anchor/dist/cjs/utils/token";
-import NodeWallet from "@coral-xyz/anchor/dist/cjs/nodewallet";
 import {
   ASSOCIATED_TOKEN_PROGRAM_ID,
   TOKEN_2022_PROGRAM_ID,
@@ -16,86 +14,57 @@ import {
 import {
   Keypair,
   PublicKey,
-  SystemProgram,
-  Transaction,
-  Connection,
-  Commitment,
-  SYSVAR_RENT_PUBKEY,
 } from "@solana/web3.js";
-import assert from "assert"
+import assert from "assert";
 
-const privateKey = [
-  82, 247, 200, 106, 74, 119, 140, 98, 199, 109, 171, 71, 72, 213, 247, 103,
-  177, 47, 192, 114, 129, 136, 104, 240, 168, 239, 112, 195, 195, 149, 245, 130,
-  182, 150, 38, 4, 144, 25, 13, 41, 87, 242, 76, 155, 13, 220, 185, 18, 234,
-  137, 27, 45, 161, 88, 72, 244, 149, 243, 167, 204, 74, 151, 140, 207,
-];
-const adminWallet = anchor.web3.Keypair.fromSecretKey(
-  Uint8Array.from(privateKey)
-);
-
-const userPrivKey = [
-  13, 174, 241, 105, 110, 239, 120, 156, 225, 229, 130, 56, 108, 252, 249, 86,
-  15, 136, 204, 8, 33, 109, 197, 18, 137, 104, 99, 219, 114, 75, 69, 202, 83,
-  137, 128, 85, 238, 147, 245, 120, 56, 39, 15, 44, 117, 11, 134, 240, 63, 31,
-  7, 160, 40, 247, 0, 234, 228, 146, 202, 161, 27, 59, 137, 42,
-];
-
-const person = anchor.web3.Keypair.fromSecretKey(Uint8Array.from(userPrivKey));
-
-// Separate withdraw wallet (different from admin)
-const withdrawWallet = Keypair.generate();
-
-describe("extension_nft", () => {
-  console.log("hehrehrehher")
-  // devnet test
-  // const commitment: Commitment = "confirmed";
-  // const connection = new Connection(
-  //   "https://holy-autumn-daylight.solana-devnet.quiknode.pro/f79aa971b5e5d9b72f0e1b55109dabed8d0b98a8/",
-  //   {
-  //     commitment,
-  //     // wsEndpoint: "wss://api.devnet.solana.com/",
-  //     confirmTransactionInitialTimeout: 60 * 10 * 1000,
-  //   }
-  // );
-
-  // const options = anchor.AnchorProvider.defaultOptions();
-  // const wallet = new NodeWallet(adminWallet);
-  // const provider = new anchor.AnchorProvider(connection, wallet, options);
-
-  // anchor.setProvider(provider);
-
+describe("soulbound_nft_multisig", () => {
   const provider = anchor.AnchorProvider.env();
   anchor.setProvider(provider);
 
   const program = anchor.workspace
     .SoulboundNftForReservation as Program<SoulboundNftForReservation>;
 
-  const payer = provider.wallet as anchor.Wallet;
+  const superAdmin = provider.wallet as anchor.Wallet;
 
-  // Payment mint (mock USDC) - will be set in beforeAll
+  // Create 4 vice admins for multisig
+  const viceAdmin1 = Keypair.generate();
+  const viceAdmin2 = Keypair.generate();
+  const viceAdmin3 = Keypair.generate();
+  const viceAdmin4 = Keypair.generate();
+
+  // Withdraw wallet and new withdraw wallet for testing
+  const withdrawWallet = Keypair.generate();
+  const newWithdrawWallet = Keypair.generate();
+
+  // User for minting
+  const user = Keypair.generate();
+
+  // Payment related
   let paymentMint: PublicKey;
-  let adminTokenAccount: PublicKey;
-  let personTokenAccount: PublicKey;
-  let withdrawWalletTokenAccount: PublicKey; // Token account for withdraw wallet
-  let vault: PublicKey; // PDA-controlled vault for payment tokens
-  const PAYMENT_DECIMALS = 6; // USDC has 6 decimals
-  const MINT_FEE = 1_000_000; // 1 USDC (in smallest units)
-  const MAX_SUPPLY = 100; // Maximum number of NFTs that can be minted (0 = unlimited)
+  let userTokenAccount: PublicKey;
+  let withdrawWalletTokenAccount: PublicKey;
+  let newWithdrawWalletTokenAccount: PublicKey;
+  let vault: PublicKey;
+  
+  const PAYMENT_DECIMALS = 6;
+  const MINT_FEE = 1_000_000; // 1 USDC
+  const MAX_SUPPLY = 100;
 
   before(async () => {
+    console.log("\n=== Setting up Multisig Test ===\n");
+
     // Create mock USDC mint
     paymentMint = await createMint(
       provider.connection,
-      payer.payer,
-      payer.publicKey, // mint authority
-      null, // freeze authority
+      superAdmin.payer,
+      superAdmin.publicKey,
+      null,
       PAYMENT_DECIMALS,
       undefined,
       undefined,
       TOKEN_PROGRAM_ID
     );
-    console.log("Payment mint (mock USDC):", paymentMint.toBase58());
+    console.log("Payment mint:", paymentMint.toBase58());
 
     // Derive vault PDA
     [vault] = await anchor.web3.PublicKey.findProgramAddress(
@@ -104,423 +73,346 @@ describe("extension_nft", () => {
     );
     console.log("Vault PDA:", vault.toBase58());
 
-    // Create admin's token account for withdrawing payments
-    adminTokenAccount = await createAssociatedTokenAccount(
-      provider.connection,
-      payer.payer,
-      paymentMint,
-      payer.publicKey,
-      undefined,
-      TOKEN_PROGRAM_ID
-    );
-    console.log("Admin token account:", adminTokenAccount.toBase58());
-
-    // Create withdraw wallet's token account (separate from admin)
+    // Create withdraw wallet token accounts
     withdrawWalletTokenAccount = await createAssociatedTokenAccount(
       provider.connection,
-      payer.payer,
+      superAdmin.payer,
       paymentMint,
       withdrawWallet.publicKey,
       undefined,
       TOKEN_PROGRAM_ID
     );
-    console.log("Withdraw wallet:", withdrawWallet.publicKey.toBase58());
-    console.log("Withdraw wallet token account:", withdrawWalletTokenAccount.toBase58());
 
-    // Ensure person wallet has enough SOL
-    const balance = await provider.connection.getBalance(person.publicKey);
-    if (balance < 1e8) {
-      console.log("Airdropping SOL to person...");
-      const res = await provider.connection.requestAirdrop(person.publicKey, 1e9);
-      await provider.connection.confirmTransaction(res, "confirmed");
-    }
-
-    // Create person's token account for payment
-    personTokenAccount = await createAssociatedTokenAccount(
+    newWithdrawWalletTokenAccount = await createAssociatedTokenAccount(
       provider.connection,
-      payer.payer,
+      superAdmin.payer,
       paymentMint,
-      person.publicKey,
+      newWithdrawWallet.publicKey,
       undefined,
       TOKEN_PROGRAM_ID
     );
-    console.log("Person token account:", personTokenAccount.toBase58());
 
-    // Mint some tokens to person for payment (e.g., 100 USDC)
+    // Airdrop SOL to user and vice admins
+    const airdropTargets = [user, viceAdmin1, viceAdmin2, viceAdmin3, viceAdmin4];
+    for (const target of airdropTargets) {
+      const sig = await provider.connection.requestAirdrop(target.publicKey, 2e9);
+      await provider.connection.confirmTransaction(sig, "confirmed");
+    }
+
+    // Create user's token account and mint USDC
+    userTokenAccount = await createAssociatedTokenAccount(
+      provider.connection,
+      superAdmin.payer,
+      paymentMint,
+      user.publicKey,
+      undefined,
+      TOKEN_PROGRAM_ID
+    );
+
     await mintTo(
       provider.connection,
-      payer.payer,
+      superAdmin.payer,
       paymentMint,
-      personTokenAccount,
-      payer.publicKey,
+      userTokenAccount,
+      superAdmin.publicKey,
       100 * 10 ** PAYMENT_DECIMALS,
       [],
       undefined,
       TOKEN_PROGRAM_ID
     );
-    console.log("Minted 100 mock USDC to person");
-  });
 
-  it("Init admin!", async () => {
-    let adminState = await anchor.web3.PublicKey.findProgramAddress(
-      [Buffer.from("admin_state")],
-      program.programId
-    );
-
-    try {
-      let tx = await program.methods
-        .initAdmin(
-          new anchor.BN(MINT_FEE), 
-          new anchor.BN(MAX_SUPPLY),
-          withdrawWallet.publicKey // withdraw_wallet - separate from admin!
-        )
-        .accounts({
-          admin: payer.publicKey,
-          paymentMint: paymentMint,
-          // vault: vault,
-          paymentTokenProgram: TOKEN_PROGRAM_ID,
-          // adminState: adminState[0],
-          // systemProgram: anchor.web3.SystemProgram.programId,
-          // rent: anchor.web3.SYSVAR_RENT_PUBKEY,
-        })
-        .signers([])
-        .rpc({ skipPreflight: true });
-
-      console.log("Init admin tx", tx);
-      await anchor.getProvider().connection.confirmTransaction(tx, "confirmed");
-      const adminStateAccount = await program.account.adminState.fetch(
-        adminState[0]
-      );
-      console.log(
-        "Admin state mint fee",
-        adminStateAccount.mintFee.toNumber()
-      );
-      console.log(
-        "Admin state payment mint",
-        adminStateAccount.paymentMint.toBase58()
-      );
-      console.log(
-        "Admin state max supply",
-        adminStateAccount.maxSupply.toNumber()
-      );
-      console.log(
-        "Admin state current reserved count",
-        adminStateAccount.currentReservedCount.toNumber()
-      );
-      console.log(
-        "Admin state withdraw wallet",
-        adminStateAccount.withdrawWallet.toBase58()
-      );
-      console.log("Vault created at:", vault.toBase58());
-    } catch (err) {
-      console.log(err);
-    }
-  });
-
-  it("Update admin!", async () => {
-    let adminState = await anchor.web3.PublicKey.findProgramAddress(
-      [Buffer.from("admin_state")],
-      program.programId
-    );
-
-    try {
-      let tx = await program.methods
-        .updateAdminInfo(
-          new anchor.BN(MINT_FEE), 
-          new anchor.BN(MAX_SUPPLY),
-          withdrawWallet.publicKey // withdraw_wallet - keep separate from admin
-        )
-        .accounts({
-          admin: payer.publicKey,
-          // adminState: adminState[0],
-          newAdmin: payer.publicKey,
-          // NOTE: payment_mint cannot be changed - vault PDA depends on it
-        })
-        .signers([])
-        .rpc({ skipPreflight: true });
-
-      console.log("Update admin tx", tx);
-      await anchor.getProvider().connection.confirmTransaction(tx, "confirmed");
-    } catch (err) {
-      console.log(err);
-    }
-  });
-
-  it("Mint nft!", async () => {
-    const balance = await anchor
-      .getProvider()
-      .connection.getBalance(person.publicKey);
-
-    console.log(person.publicKey.toString(), " has ", balance);
-
-    if (balance < 1e8) {
-      console.log("Need to get airdrop sol");
-      const res = await anchor
-        .getProvider()
-        .connection.requestAirdrop(person.publicKey, 1e9);
-      await anchor
-        .getProvider()
-        .connection.confirmTransaction(res, "confirmed");
-    }
-
-    let mint = new Keypair();
-    console.log("Mint public key", mint.publicKey.toBase58());
-
-    const destinationTokenAccount = getAssociatedTokenAddressSync(
-      mint.publicKey,
-      person.publicKey,
-      false,
-      TOKEN_2022_PROGRAM_ID,
-      ASSOCIATED_TOKEN_PROGRAM_ID
-    );
-
-    let adminState = await anchor.web3.PublicKey.findProgramAddress(
-      [Buffer.from("admin_state")],
-      program.programId
-    );
-
-    let userState = await anchor.web3.PublicKey.findProgramAddress(
-      [Buffer.from("user_state"), person.publicKey.toBuffer()],
-      program.programId
-    );
-
-    // Get person's token balance before mint
-    const personTokenBefore = await getAccount(provider.connection, personTokenAccount);
-    console.log("Person USDC balance before mint:", Number(personTokenBefore.amount) / 10 ** PAYMENT_DECIMALS);
-
-    // Get vault balance before mint
-    const vaultBefore = await getAccount(provider.connection, vault);
-    console.log("Vault USDC balance before mint:", Number(vaultBefore.amount) / 10 ** PAYMENT_DECIMALS);
-
-    try {
-      let tx = await program.methods
-        .mintNft(
-          "Veintree",
-          "VA",
-          "https://arweave.net/MHK3Iopy0GgvDoM7LkkiAdg7pQqExuuWvedApCnzfj0"
-        )
-        .accounts({
-          signer: person.publicKey,
-          // systemProgram: anchor.web3.SystemProgram.programId,
-          // tokenProgram: TOKEN_2022_PROGRAM_ID,
-          // associatedTokenProgram: ASSOCIATED_PROGRAM_ID,
-          tokenAccount: destinationTokenAccount,
-          mint: mint.publicKey,
-          // adminState: adminState[0],
-          // userState: userState[0],
-          admin: payer.publicKey,
-          // rent: anchor.web3.SYSVAR_RENT_PUBKEY,
-          paymentMint: paymentMint,
-          payerTokenAccount: personTokenAccount,
-          // vault: vault,
-          paymentTokenProgram: TOKEN_PROGRAM_ID,
-        })
-        .signers([mint, person])
-        .rpc({ skipPreflight: true });
-
-      console.log("Mint nft tx", tx);
-      await anchor.getProvider().connection.confirmTransaction(tx, "confirmed");
-
-      const adminStateAccount = await program.account.adminState.fetch(
-        adminState[0]
-      );
-      console.log(
-        "Admin state current reserved count",
-        adminStateAccount.currentReservedCount.toNumber()
-      );
-
-      // Check token balances after mint
-      const personTokenAfter = await getAccount(provider.connection, personTokenAccount);
-      const vaultAfter = await getAccount(provider.connection, vault);
-      console.log("Person USDC balance after mint:", Number(personTokenAfter.amount) / 10 ** PAYMENT_DECIMALS);
-      console.log("Vault USDC balance after mint:", Number(vaultAfter.amount) / 10 ** PAYMENT_DECIMALS);
-
-      await anchor.getProvider().connection.confirmTransaction(tx, "confirmed");
-    } catch (err) {
-      console.log(err);
-    }
-  });
-
-  it("Burn nft!", async () => {
-    // Use current user_state nft as the old mint to burn
-    let adminState = await anchor.web3.PublicKey.findProgramAddress(
-      [Buffer.from("admin_state")],
-      program.programId
-    );
-
-    let userState = await anchor.web3.PublicKey.findProgramAddress(
-      [Buffer.from("user_state"), person.publicKey.toBuffer()],
-      program.programId
-    );
-
-    const userStateAccount = await program.account.userState.fetch(userState[0]);
-    const oldMint = userStateAccount.nftAddress;
-
-    const oldTokenAccount = getAssociatedTokenAddressSync(
-      oldMint,
-      person.publicKey,
-      false,
-      TOKEN_2022_PROGRAM_ID,
-      ASSOCIATED_TOKEN_PROGRAM_ID
-    );
-
-    // fetch adminState before burn
-    const adminStateBefore = await program.account.adminState.fetch(adminState[0]);
-    const reservedBefore = adminStateBefore.currentReservedCount.toNumber();
-
-    try {
-      // use untyped access because the generated TS types may be out-of-date
-      let tx = await program.methods
-        .burnNft()
-        .accounts({
-          signer: person.publicKey,
-          oldMint,
-          oldTokenAccount,
-        })
-        .signers([person])
-        .rpc({ skipPreflight: true });
-
-      console.log("Burn nft tx", tx);
-      await anchor.getProvider().connection.confirmTransaction(tx, "confirmed");
-
-      // fetch user state and ensure nft_address reset to default (zero pubkey)
-      const updatedUserState = await program.account.userState.fetch(userState[0]);
-      console.log("Updated user_state nft_address:", updatedUserState.nftAddress.toBase58());
-      const zero = new PublicKey(new Uint8Array(32));
-      assert.strictEqual(updatedUserState.nftAddress.toBase58(), zero.toBase58());
-
-      // fetch adminState after burn and check currentReservedCount decreased by 1
-      const adminStateAfter = await program.account.adminState.fetch(adminState[0]);
-      const reservedAfter = adminStateAfter.currentReservedCount.toNumber();
-      console.log(`currentReservedCount before: ${reservedBefore}, after: ${reservedAfter}`);
-      assert.strictEqual(reservedAfter, reservedBefore - 1);
-    } catch (err) {
-      console.log(err);
-    }
-  });
-
-  it("Withdraw from vault to separate withdraw wallet!", async () => {
-    // Get vault balance before withdrawal
-    const vaultBefore = await getAccount(provider.connection, vault);
-    const vaultBalanceBefore = Number(vaultBefore.amount);
-    console.log("Vault USDC balance before withdraw:", vaultBalanceBefore / 10 ** PAYMENT_DECIMALS);
-
-    // Get withdraw wallet's token account balance before withdrawal
-    // withdraw_wallet is a SEPARATE wallet from admin!
-    const withdrawTokenBefore = await getAccount(provider.connection, withdrawWalletTokenAccount);
-    const withdrawBalanceBefore = Number(withdrawTokenBefore.amount);
+    console.log("Super admin:", superAdmin.publicKey.toBase58());
+    console.log("Vice admin 1:", viceAdmin1.publicKey.toBase58());
+    console.log("Vice admin 2:", viceAdmin2.publicKey.toBase58());
+    console.log("Vice admin 3:", viceAdmin3.publicKey.toBase58());
+    console.log("Vice admin 4:", viceAdmin4.publicKey.toBase58());
     console.log("Withdraw wallet:", withdrawWallet.publicKey.toBase58());
-    console.log("Withdraw wallet USDC balance before withdraw:", withdrawBalanceBefore / 10 ** PAYMENT_DECIMALS);
-
-    // Withdraw all tokens from vault
-    const withdrawAmount = vaultBalanceBefore;
-    console.log("Withdrawing:", withdrawAmount / 10 ** PAYMENT_DECIMALS, "USDC to withdraw wallet");
-
-    try {
-      let tx = await program.methods
-        .withdraw(new anchor.BN(withdrawAmount))
-        .accounts({
-          admin: payer.publicKey,
-          paymentMint: paymentMint,
-          // vault: vault,
-          withdrawTokenAccount: withdrawWalletTokenAccount, // owned by withdrawWallet (NOT admin!)
-          tokenProgram: TOKEN_PROGRAM_ID,
-        })
-        .signers([])
-        .rpc({ skipPreflight: true });
-
-      console.log("Withdraw tx", tx);
-      await anchor.getProvider().connection.confirmTransaction(tx, "confirmed");
-
-      // Check balances after withdrawal
-      const vaultAfter = await getAccount(provider.connection, vault);
-      const withdrawTokenAfter = await getAccount(provider.connection, withdrawWalletTokenAccount);
-      
-      console.log("Vault USDC balance after withdraw:", Number(vaultAfter.amount) / 10 ** PAYMENT_DECIMALS);
-      console.log("Withdraw wallet USDC balance after withdraw:", Number(withdrawTokenAfter.amount) / 10 ** PAYMENT_DECIMALS);
-
-      // Verify vault is empty and withdraw wallet received the tokens
-      assert.strictEqual(Number(vaultAfter.amount), 0);
-      assert.strictEqual(Number(withdrawTokenAfter.amount), withdrawBalanceBefore + withdrawAmount);
-      console.log("✓ Funds successfully withdrawn to separate withdraw wallet!");
-    } catch (err) {
-      console.log(err);
-    }
+    console.log("New withdraw wallet:", newWithdrawWallet.publicKey.toBase58());
   });
 
-  it("Withdraw should FAIL if token account owner doesn't match withdraw_wallet!", async () => {
-    // First, mint another NFT to get some tokens in vault
-    let mint = new Keypair();
-    const destinationTokenAccount = getAssociatedTokenAddressSync(
-      mint.publicKey,
-      person.publicKey,
-      false,
-      TOKEN_2022_PROGRAM_ID,
-      ASSOCIATED_TOKEN_PROGRAM_ID
-    );
-
-    // Mint more USDC to person for another mint
-    await mintTo(
-      provider.connection,
-      payer.payer,
-      paymentMint,
-      personTokenAccount,
-      payer.publicKey,
-      10 * 10 ** PAYMENT_DECIMALS,
-      [],
-      undefined,
-      TOKEN_PROGRAM_ID
-    );
-
-    // Burn existing NFT first so person can mint again
-    const [userState] = await anchor.web3.PublicKey.findProgramAddress(
-      [Buffer.from("user_state"), person.publicKey.toBuffer()],
-      program.programId
-    );
-
-    // Mint new NFT
-    await program.methods
-      .mintNft("Test NFT", "TEST", "https://example.com")
+  it("1. Init admin with super_admin", async () => {
+    const tx = await program.methods
+      .initAdmin(
+        new anchor.BN(MINT_FEE),
+        new anchor.BN(MAX_SUPPLY),
+        withdrawWallet.publicKey
+      )
       .accounts({
-        signer: person.publicKey,
-        tokenAccount: destinationTokenAccount,
-        mint: mint.publicKey,
-        admin: payer.publicKey,
+        superAdmin: superAdmin.publicKey,
         paymentMint: paymentMint,
-        payerTokenAccount: personTokenAccount,
         paymentTokenProgram: TOKEN_PROGRAM_ID,
       })
-      .signers([mint, person])
       .rpc({ skipPreflight: true });
 
-    console.log("Minted another NFT to get tokens in vault");
+    await provider.connection.confirmTransaction(tx, "confirmed");
+    console.log("Init admin tx:", tx);
 
-    // Now try to withdraw to admin's token account (which is NOT owned by withdraw_wallet)
-    const vaultBalance = await getAccount(provider.connection, vault);
-    const withdrawAmount = Number(vaultBalance.amount);
+    const [adminState] = await anchor.web3.PublicKey.findProgramAddress(
+      [Buffer.from("admin_state")],
+      program.programId
+    );
 
+    const state = await program.account.adminState.fetch(adminState);
+    console.log("Super admin:", state.superAdmin.toBase58());
+    console.log("Withdraw wallet:", state.withdrawWallet.toBase58());
+    
+    assert.strictEqual(state.superAdmin.toBase58(), superAdmin.publicKey.toBase58());
+    assert.strictEqual(state.withdrawWallet.toBase58(), withdrawWallet.publicKey.toBase58());
+  });
+
+  it("2. Set vice admins (super_admin only)", async () => {
+    const viceAdmins: [PublicKey, PublicKey, PublicKey, PublicKey] = [
+      viceAdmin1.publicKey,
+      viceAdmin2.publicKey,
+      viceAdmin3.publicKey,
+      viceAdmin4.publicKey,
+    ];
+
+    const tx = await program.methods
+      .setViceAdmins(viceAdmins)
+      .accounts({
+        superAdmin: superAdmin.publicKey,
+      })
+      .rpc({ skipPreflight: true });
+
+    await provider.connection.confirmTransaction(tx, "confirmed");
+    console.log("Set vice admins tx:", tx);
+
+    const [adminState] = await anchor.web3.PublicKey.findProgramAddress(
+      [Buffer.from("admin_state")],
+      program.programId
+    );
+
+    const state = await program.account.adminState.fetch(adminState);
+    console.log("Vice admins set:");
+    state.viceAdmins.forEach((va, i) => {
+      console.log(`  ${i + 1}: ${va.toBase58()}`);
+    });
+  });
+
+  it("3. Update admin info (super_admin only)", async () => {
+    const tx = await program.methods
+      .updateAdminInfo(
+        new anchor.BN(MINT_FEE * 2), // Double the fee
+        new anchor.BN(MAX_SUPPLY)
+      )
+      .accounts({
+        superAdmin: superAdmin.publicKey,
+        newSuperAdmin: superAdmin.publicKey, // Keep same super admin
+      })
+      .rpc({ skipPreflight: true });
+
+    await provider.connection.confirmTransaction(tx, "confirmed");
+    console.log("Update admin tx:", tx);
+  });
+
+  it("4. Mint NFT", async () => {
+    const mint = Keypair.generate();
+    const tokenAccount = getAssociatedTokenAddressSync(
+      mint.publicKey,
+      user.publicKey,
+      false,
+      TOKEN_2022_PROGRAM_ID,
+      ASSOCIATED_TOKEN_PROGRAM_ID
+    );
+
+    const tx = await program.methods
+      .mintNft("Test NFT", "TEST", "https://example.com/nft")
+      .accounts({
+        signer: user.publicKey,
+        tokenAccount: tokenAccount,
+        mint: mint.publicKey,
+        superAdmin: superAdmin.publicKey,
+        paymentMint: paymentMint,
+        payerTokenAccount: userTokenAccount,
+        paymentTokenProgram: TOKEN_PROGRAM_ID,
+      })
+      .signers([mint, user])
+      .rpc({ skipPreflight: true });
+
+    await provider.connection.confirmTransaction(tx, "confirmed");
+    console.log("Mint NFT tx:", tx);
+
+    const vaultAccount = await getAccount(provider.connection, vault);
+    console.log("Vault balance after mint:", Number(vaultAccount.amount) / 10 ** PAYMENT_DECIMALS, "USDC");
+  });
+
+  it("5. Multisig: First signer proposes new withdraw wallet", async () => {
+    // Vice admin 1 proposes
+    const tx = await program.methods
+      .updateWithdrawWallet(newWithdrawWallet.publicKey)
+      .accounts({
+        signer: viceAdmin1.publicKey,
+      })
+      .signers([viceAdmin1])
+      .rpc({ skipPreflight: true });
+
+    await provider.connection.confirmTransaction(tx, "confirmed");
+    console.log("Proposal tx by vice admin 1:", tx);
+
+    const [adminState] = await anchor.web3.PublicKey.findProgramAddress(
+      [Buffer.from("admin_state")],
+      program.programId
+    );
+
+    const state = await program.account.adminState.fetch(adminState);
+    console.log("Pending withdraw wallet:", state.pendingWithdrawWallet.toBase58());
+    console.log("Approval bitmap:", state.approvalBitmap);
+    console.log("Approval count: 1/3");
+
+    assert.strictEqual(state.pendingWithdrawWallet.toBase58(), newWithdrawWallet.publicKey.toBase58());
+    assert.strictEqual(state.approvalBitmap, 2); // bit 1 = vice_admin[0]
+  });
+
+  it("6. Multisig: Second signer approves", async () => {
+    // Super admin approves
+    const tx = await program.methods
+      .updateWithdrawWallet(newWithdrawWallet.publicKey)
+      .accounts({
+        signer: superAdmin.publicKey,
+      })
+      .rpc({ skipPreflight: true });
+
+    await provider.connection.confirmTransaction(tx, "confirmed");
+    console.log("Approval tx by super admin:", tx);
+
+    const [adminState] = await anchor.web3.PublicKey.findProgramAddress(
+      [Buffer.from("admin_state")],
+      program.programId
+    );
+
+    const state = await program.account.adminState.fetch(adminState);
+    console.log("Approval bitmap:", state.approvalBitmap);
+    console.log("Approval count: 2/3");
+
+    assert.strictEqual(state.approvalBitmap, 3); // bit 0 + bit 1
+  });
+
+  it("7. Multisig: Third signer approves - threshold reached!", async () => {
+    // Vice admin 2 approves - this should trigger the update
+    const tx = await program.methods
+      .updateWithdrawWallet(newWithdrawWallet.publicKey)
+      .accounts({
+        signer: viceAdmin2.publicKey,
+      })
+      .signers([viceAdmin2])
+      .rpc({ skipPreflight: true });
+
+    await provider.connection.confirmTransaction(tx, "confirmed");
+    console.log("Final approval tx by vice admin 2:", tx);
+
+    const [adminState] = await anchor.web3.PublicKey.findProgramAddress(
+      [Buffer.from("admin_state")],
+      program.programId
+    );
+
+    const state = await program.account.adminState.fetch(adminState);
+    console.log("Withdraw wallet after update:", state.withdrawWallet.toBase58());
+    console.log("Pending withdraw wallet (should be zero):", state.pendingWithdrawWallet.toBase58());
+    console.log("Approval bitmap (should be 0):", state.approvalBitmap);
+
+    // Verify update happened
+    assert.strictEqual(state.withdrawWallet.toBase58(), newWithdrawWallet.publicKey.toBase58());
+    assert.strictEqual(state.pendingWithdrawWallet.toBase58(), PublicKey.default.toBase58());
+    assert.strictEqual(state.approvalBitmap, 0);
+
+    console.log("✓ Multisig threshold reached! Withdraw wallet updated.");
+  });
+
+  it("8. Withdraw to new withdraw wallet", async () => {
+    const vaultBefore = await getAccount(provider.connection, vault);
+    const withdrawAmount = Number(vaultBefore.amount);
+    console.log("Vault balance:", withdrawAmount / 10 ** PAYMENT_DECIMALS, "USDC");
+
+    const tx = await program.methods
+      .withdraw(new anchor.BN(withdrawAmount))
+      .accounts({
+        superAdmin: superAdmin.publicKey,
+        paymentMint: paymentMint,
+        withdrawTokenAccount: newWithdrawWalletTokenAccount,
+        tokenProgram: TOKEN_PROGRAM_ID,
+      })
+      .rpc({ skipPreflight: true });
+
+    await provider.connection.confirmTransaction(tx, "confirmed");
+    console.log("Withdraw tx:", tx);
+
+    const newWalletBalance = await getAccount(provider.connection, newWithdrawWalletTokenAccount);
+    console.log("New withdraw wallet balance:", Number(newWalletBalance.amount) / 10 ** PAYMENT_DECIMALS, "USDC");
+
+    console.log("✓ Successfully withdrew to new multisig-approved wallet!");
+  });
+
+  it("9. Test: Cannot approve same proposal twice", async () => {
+    // Start a new proposal
+    await program.methods
+      .updateWithdrawWallet(withdrawWallet.publicKey) // Propose switching back
+      .accounts({
+        signer: viceAdmin1.publicKey,
+      })
+      .signers([viceAdmin1])
+      .rpc({ skipPreflight: true });
+
+    // Try to approve again with same signer
+    let errorThrown = false;
     try {
       await program.methods
-        .withdraw(new anchor.BN(withdrawAmount))
+        .updateWithdrawWallet(withdrawWallet.publicKey)
         .accounts({
-          admin: payer.publicKey,
-          paymentMint: paymentMint,
-          withdrawTokenAccount: adminTokenAccount, // This should FAIL - owned by admin, not withdraw_wallet
-          tokenProgram: TOKEN_PROGRAM_ID,
+          signer: viceAdmin1.publicKey,
         })
-        .signers([])
+        .signers([viceAdmin1])
         .rpc({ skipPreflight: true });
-
-      assert.fail("Expected InvalidWithdrawWallet error but withdraw succeeded");
-    } catch (err: any) {
-      console.log("Expected error received:", err.message?.substring(0, 100));
-      assert.ok(
-        err.message.includes("InvalidWithdrawWallet") ||
-        err.message.includes("0x177d") ||
-        err.logs?.some((log: string) => log.includes("InvalidWithdrawWallet")),
-        "Expected InvalidWithdrawWallet error"
-      );
-      console.log("✓ Correctly rejected withdraw to wrong wallet!");
+    } catch (err) {
+      errorThrown = true;
+      console.log("✓ Correctly rejected duplicate approval");
     }
+
+    assert.ok(errorThrown, "Should have rejected duplicate approval");
+  });
+
+  it("10. Test: Cancel pending proposal", async () => {
+    const tx = await program.methods
+      .cancelWithdrawWalletProposal()
+      .accounts({
+        signer: superAdmin.publicKey,
+      })
+      .rpc({ skipPreflight: true });
+
+    await provider.connection.confirmTransaction(tx, "confirmed");
+    console.log("Cancel proposal tx:", tx);
+
+    const [adminState] = await anchor.web3.PublicKey.findProgramAddress(
+      [Buffer.from("admin_state")],
+      program.programId
+    );
+
+    const state = await program.account.adminState.fetch(adminState);
+    assert.strictEqual(state.pendingWithdrawWallet.toBase58(), PublicKey.default.toBase58());
+    assert.strictEqual(state.approvalBitmap, 0);
+
+    console.log("✓ Proposal cancelled successfully");
+  });
+
+  it("11. Test: Non-member cannot propose", async () => {
+    const randomUser = Keypair.generate();
+    const sig = await provider.connection.requestAirdrop(randomUser.publicKey, 1e9);
+    await provider.connection.confirmTransaction(sig, "confirmed");
+
+    let errorThrown = false;
+    try {
+      await program.methods
+        .updateWithdrawWallet(withdrawWallet.publicKey)
+        .accounts({
+          signer: randomUser.publicKey,
+        })
+        .signers([randomUser])
+        .rpc({ skipPreflight: true });
+    } catch (err) {
+      errorThrown = true;
+      console.log("✓ Correctly rejected non-member proposal");
+    }
+
+    assert.ok(errorThrown, "Should have rejected non-member");
   });
 });

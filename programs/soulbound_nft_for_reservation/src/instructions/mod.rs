@@ -1,11 +1,15 @@
 pub mod burn_nft;
 pub mod init_admin;
 pub mod mint_nft;
+pub mod set_vice_admins;
 pub mod update_admin;
+pub mod update_withdraw_wallet;
 pub mod withdraw;
 
 pub use burn_nft::*;
 pub use init_admin::*;
 pub use mint_nft::*;
+pub use set_vice_admins::*;
 pub use update_admin::*;
+pub use update_withdraw_wallet::*;
 pub use withdraw::*;

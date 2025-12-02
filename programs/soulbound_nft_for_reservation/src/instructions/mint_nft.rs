@@ -33,7 +33,7 @@ pub struct MintNft<'info> {
         mut,
         seeds = [b"admin_state".as_ref()],
         bump,
-        constraint = admin_state.admin == admin.key()
+        constraint = admin_state.super_admin == super_admin.key()
     )]
     pub admin_state: Account<'info, AdminState>,
     #[account(
@@ -46,7 +46,7 @@ pub struct MintNft<'info> {
     pub user_state: Box<Account<'info, UserState>>,
     /// CHECK: This is not dangerous because we don't read or write from this account
     #[account(mut)]
-    pub admin: AccountInfo<'info>,
+    pub super_admin: AccountInfo<'info>,
 
     // === Payment token accounts ===
     /// The SPL token mint for payment (e.g., USDC) - must match admin_state.payment_mint

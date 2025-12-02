@@ -5,15 +5,15 @@ use crate::state::*;
 
 #[derive(Accounts)]
 pub struct InitAdmin<'info> {
-    /// CHECK: This is not dangerous because we don't read or write from this account
+    /// Super admin who initializes the program
     #[account(mut)]
-    pub admin: Signer<'info>,
+    pub super_admin: Signer<'info>,
 
     #[account(
          init,
          seeds = [b"admin_state".as_ref()],
          bump,
-         payer = admin,
+         payer = super_admin,
          space = AdminState::space()
      )]
     pub admin_state: Box<Account<'info, AdminState>>,
@@ -28,7 +28,7 @@ pub struct InitAdmin<'info> {
     /// Created during init_admin, authority is admin_state PDA
     #[account(
         init,
-        payer = admin,
+        payer = super_admin,
         seeds = [b"vault", payment_mint.key().as_ref()],
         bump,
         token::mint = payment_mint,
@@ -40,22 +40,25 @@ pub struct InitAdmin<'info> {
     /// Token program for payment mint (can be Token or Token2022)
     pub payment_token_program: Interface<'info, TokenInterface>,
 
-    /// CHECK: This is not dangerous because we don't read or write from this account
     pub system_program: Program<'info, System>,
     pub rent: Sysvar<'info, Rent>,
 }
 
 pub fn handler(ctx: Context<InitAdmin>, mint_fee: u64, max_supply: u64, withdraw_wallet: Pubkey) -> Result<()> {
-    ctx.accounts.admin_state.admin = *ctx.accounts.admin.key; // admin wallet address
-    ctx.accounts.admin_state.withdraw_wallet = withdraw_wallet; // wallet to receive withdrawn funds
-    ctx.accounts.admin_state.mint_fee = mint_fee; // mint fee in token smallest units
-    ctx.accounts.admin_state.bump = ctx.bumps.admin_state; // need to store bump for generate seeds
-    ctx.accounts.admin_state.current_reserved_count = 0; // initialize reserved count
-    ctx.accounts.admin_state.payment_mint = ctx.accounts.payment_mint.key(); // payment token mint (e.g., USDC)
-    ctx.accounts.admin_state.max_supply = max_supply; // max supply (0 = unlimited)
+    ctx.accounts.admin_state.bump = ctx.bumps.admin_state;
+    ctx.accounts.admin_state.super_admin = *ctx.accounts.super_admin.key;
+    ctx.accounts.admin_state.vice_admins = [Pubkey::default(); 4]; // Initialize empty, set later
+    ctx.accounts.admin_state.withdraw_wallet = withdraw_wallet;
+    ctx.accounts.admin_state.mint_fee = mint_fee;
+    ctx.accounts.admin_state.current_reserved_count = 0;
+    ctx.accounts.admin_state.payment_mint = ctx.accounts.payment_mint.key();
+    ctx.accounts.admin_state.max_supply = max_supply;
+    ctx.accounts.admin_state.pending_withdraw_wallet = Pubkey::default();
+    ctx.accounts.admin_state.approval_bitmap = 0;
 
     msg!("Admin initialized with vault at: {}, max_supply: {}, withdraw_wallet: {}", 
         ctx.accounts.vault.key(), max_supply, withdraw_wallet);
+    msg!("Super admin: {}. Vice admins need to be set separately.", ctx.accounts.super_admin.key);
 
     Ok(())
 }

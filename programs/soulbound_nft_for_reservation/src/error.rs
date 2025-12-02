@@ -30,4 +30,16 @@ pub enum ProgramErrorCode {
     MaxSupplyReached,
     #[msg("Invalid withdraw wallet - token account owner must match admin_state.withdraw_wallet")]
     InvalidWithdrawWallet,
+    #[msg("Not a multisig member - must be super_admin or vice_admin")]
+    NotMultisigMember,
+    #[msg("Already approved this proposal")]
+    AlreadyApproved,
+    #[msg("A different proposal is pending - cancel it first")]
+    DifferentProposalPending,
+    #[msg("No proposal pending")]
+    NoProposalPending,
+    #[msg("Vice admin cannot be the same as super admin")]
+    InvalidViceAdmin,
+    #[msg("Duplicate vice admin addresses not allowed")]
+    DuplicateViceAdmin,
 }
