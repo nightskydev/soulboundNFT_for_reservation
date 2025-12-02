@@ -77,6 +77,7 @@ describe("extension_nft", () => {
   let vault: PublicKey; // PDA-controlled vault for payment tokens
   const PAYMENT_DECIMALS = 6; // USDC has 6 decimals
   const MINT_FEE = 1_000_000; // 1 USDC (in smallest units)
+  const MAX_SUPPLY = 100; // Maximum number of NFTs that can be minted (0 = unlimited)
 
   before(async () => {
     // Create mock USDC mint
@@ -152,7 +153,7 @@ describe("extension_nft", () => {
 
     try {
       let tx = await program.methods
-        .initAdmin(new anchor.BN(MINT_FEE)) // 1 USDC
+        .initAdmin(new anchor.BN(MINT_FEE), new anchor.BN(MAX_SUPPLY)) // 1 USDC, max 100 NFTs
         .accounts({
           admin: payer.publicKey,
           paymentMint: paymentMint,
@@ -179,6 +180,10 @@ describe("extension_nft", () => {
         adminStateAccount.paymentMint.toBase58()
       );
       console.log(
+        "Admin state max supply",
+        adminStateAccount.maxSupply.toNumber()
+      );
+      console.log(
         "Admin state current reserved count",
         adminStateAccount.currentReservedCount.toNumber()
       );
@@ -196,13 +201,12 @@ describe("extension_nft", () => {
 
     try {
       let tx = await program.methods
-        .updateAdminInfo(new anchor.BN(MINT_FEE)) // 1 USDC
+        .updateAdminInfo(new anchor.BN(MINT_FEE), new anchor.BN(MAX_SUPPLY)) // 1 USDC, max 100 NFTs
         .accounts({
           admin: payer.publicKey,
           // adminState: adminState[0],
           newAdmin: payer.publicKey,
-          paymentMint: paymentMint,
-          paymentTokenProgram: TOKEN_PROGRAM_ID,
+          // NOTE: payment_mint cannot be changed - vault PDA depends on it
         })
         .signers([])
         .rpc({ skipPreflight: true });

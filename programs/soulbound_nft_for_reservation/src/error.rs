@@ -26,4 +26,6 @@ pub enum ProgramErrorCode {
     InvalidWithdrawAmount,
     #[msg("Insufficient vault balance for withdrawal")]
     InsufficientVaultBalance,
+    #[msg("Max supply reached - no more NFTs can be minted")]
+    MaxSupplyReached,
 }

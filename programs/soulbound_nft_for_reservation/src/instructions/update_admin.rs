@@ -1,5 +1,4 @@
 use anchor_lang::prelude::*;
-use anchor_spl::token_interface::{Mint, TokenInterface};
 
 use crate::state::*;
 use crate::error::ProgramErrorCode;
@@ -21,33 +20,19 @@ pub struct UpdateAdminInfo<'info> {
         constraint = admin_state.admin == admin.key()
      )]
     pub admin_state: Box<Account<'info, AdminState>>,
-
-    /// The new SPL token mint for payment (e.g., USDC)
-    #[account(
-        mint::token_program = payment_token_program
-    )]
-    pub payment_mint: InterfaceAccount<'info, Mint>,
-
-    /// Token program for payment mint (can be Token or Token2022)
-    pub payment_token_program: Interface<'info, TokenInterface>,
 }
 
-pub fn handler(ctx: Context<UpdateAdminInfo>, mint_fee: u64) -> Result<()> {
+pub fn handler(ctx: Context<UpdateAdminInfo>, mint_fee: u64, max_supply: u64) -> Result<()> {
     // Validate that new_admin is not a system program
     require!(
         ctx.accounts.new_admin.key() != anchor_lang::solana_program::system_program::id(),
         ProgramErrorCode::InvalidAdminAccount
     );
 
-    // Validate that new_admin is not the same as current admin (optional, but prevents unnecessary updates)
-    // This is commented out to allow setting the same admin if needed (e.g., to just update fee)
-    // require!(
-    //     ctx.accounts.new_admin.key() != ctx.accounts.admin.key(),
-    //     ProgramErrorCode::InvalidAdminAccount
-    // );
-
     ctx.accounts.admin_state.admin = *ctx.accounts.new_admin.key; // update new admin
     ctx.accounts.admin_state.mint_fee = mint_fee; // update mint fee in token smallest units
-    ctx.accounts.admin_state.payment_mint = ctx.accounts.payment_mint.key(); // update payment token mint
+    ctx.accounts.admin_state.max_supply = max_supply; // update max supply (0 = unlimited)
+    // NOTE: payment_mint cannot be changed because the vault PDA is derived from it.
+    // Changing payment_mint would orphan the existing vault with its funds.
     Ok(())
 }

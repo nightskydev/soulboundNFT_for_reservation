@@ -7,6 +7,7 @@ pub struct AdminState {
     pub mint_fee: u64, // fee to mint nft - in smallest token units (e.g., for USDC with 6 decimals, 1_000_000 = 1 USDC)
     pub current_reserved_count: u64, // current number of reserved NFTs
     pub payment_mint: Pubkey, // SPL token mint address for payment (e.g., USDC)
+    pub max_supply: u64, // maximum number of NFTs that can be minted (0 = unlimited)
 }
 
 impl AdminState {
@@ -16,6 +17,7 @@ impl AdminState {
         32 +    // admin
         8 +     // mint_fee
         8 +     // current_reserved_count
-        32      // payment_mint
+        32 +    // payment_mint
+        8       // max_supply
     }
 }

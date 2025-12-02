@@ -87,6 +87,15 @@ pub fn handler(ctx: Context<MintNft>, name: String, symbol: String, uri: String)
         ProgramErrorCode::UserAlreadyHasNft
     );
 
+    // Check max supply (0 = unlimited)
+    let max_supply = ctx.accounts.admin_state.max_supply;
+    if max_supply > 0 {
+        require!(
+            ctx.accounts.admin_state.current_reserved_count < max_supply,
+            ProgramErrorCode::MaxSupplyReached
+        );
+    }
+
     let space = ExtensionType::try_calculate_account_len::<spl_token_2022::state::Mint>(&[
         ExtensionType::MintCloseAuthority,
         ExtensionType::NonTransferable,
