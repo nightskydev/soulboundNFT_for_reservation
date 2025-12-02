@@ -6,7 +6,12 @@ import NodeWallet from "@coral-xyz/anchor/dist/cjs/nodewallet";
 import {
   ASSOCIATED_TOKEN_PROGRAM_ID,
   TOKEN_2022_PROGRAM_ID,
+  TOKEN_PROGRAM_ID,
   getAssociatedTokenAddressSync,
+  createMint,
+  createAssociatedTokenAccount,
+  mintTo,
+  getAccount,
 } from "@solana/spl-token";
 import {
   Keypair,
@@ -65,6 +70,80 @@ describe("extension_nft", () => {
 
   const payer = provider.wallet as anchor.Wallet;
 
+  // Payment mint (mock USDC) - will be set in beforeAll
+  let paymentMint: PublicKey;
+  let adminTokenAccount: PublicKey;
+  let personTokenAccount: PublicKey;
+  let vault: PublicKey; // PDA-controlled vault for payment tokens
+  const PAYMENT_DECIMALS = 6; // USDC has 6 decimals
+  const MINT_FEE = 1_000_000; // 1 USDC (in smallest units)
+
+  before(async () => {
+    // Create mock USDC mint
+    paymentMint = await createMint(
+      provider.connection,
+      payer.payer,
+      payer.publicKey, // mint authority
+      null, // freeze authority
+      PAYMENT_DECIMALS,
+      undefined,
+      undefined,
+      TOKEN_PROGRAM_ID
+    );
+    console.log("Payment mint (mock USDC):", paymentMint.toBase58());
+
+    // Derive vault PDA
+    [vault] = await anchor.web3.PublicKey.findProgramAddress(
+      [Buffer.from("vault"), paymentMint.toBuffer()],
+      program.programId
+    );
+    console.log("Vault PDA:", vault.toBase58());
+
+    // Create admin's token account for withdrawing payments
+    adminTokenAccount = await createAssociatedTokenAccount(
+      provider.connection,
+      payer.payer,
+      paymentMint,
+      payer.publicKey,
+      undefined,
+      TOKEN_PROGRAM_ID
+    );
+    console.log("Admin token account:", adminTokenAccount.toBase58());
+
+    // Ensure person wallet has enough SOL
+    const balance = await provider.connection.getBalance(person.publicKey);
+    if (balance < 1e8) {
+      console.log("Airdropping SOL to person...");
+      const res = await provider.connection.requestAirdrop(person.publicKey, 1e9);
+      await provider.connection.confirmTransaction(res, "confirmed");
+    }
+
+    // Create person's token account for payment
+    personTokenAccount = await createAssociatedTokenAccount(
+      provider.connection,
+      payer.payer,
+      paymentMint,
+      person.publicKey,
+      undefined,
+      TOKEN_PROGRAM_ID
+    );
+    console.log("Person token account:", personTokenAccount.toBase58());
+
+    // Mint some tokens to person for payment (e.g., 100 USDC)
+    await mintTo(
+      provider.connection,
+      payer.payer,
+      paymentMint,
+      personTokenAccount,
+      payer.publicKey,
+      100 * 10 ** PAYMENT_DECIMALS,
+      [],
+      undefined,
+      TOKEN_PROGRAM_ID
+    );
+    console.log("Minted 100 mock USDC to person");
+  });
+
   it("Init admin!", async () => {
     let adminState = await anchor.web3.PublicKey.findProgramAddress(
       [Buffer.from("admin_state")],
@@ -73,9 +152,12 @@ describe("extension_nft", () => {
 
     try {
       let tx = await program.methods
-        .initAdmin(new anchor.BN(1000))
+        .initAdmin(new anchor.BN(MINT_FEE)) // 1 USDC
         .accounts({
           admin: payer.publicKey,
+          paymentMint: paymentMint,
+          // vault: vault,
+          paymentTokenProgram: TOKEN_PROGRAM_ID,
           // adminState: adminState[0],
           // systemProgram: anchor.web3.SystemProgram.programId,
           // rent: anchor.web3.SYSVAR_RENT_PUBKEY,
@@ -93,9 +175,14 @@ describe("extension_nft", () => {
         adminStateAccount.mintFee.toNumber()
       );
       console.log(
+        "Admin state payment mint",
+        adminStateAccount.paymentMint.toBase58()
+      );
+      console.log(
         "Admin state current reserved count",
         adminStateAccount.currentReservedCount.toNumber()
       );
+      console.log("Vault created at:", vault.toBase58());
     } catch (err) {
       console.log(err);
     }
@@ -109,11 +196,13 @@ describe("extension_nft", () => {
 
     try {
       let tx = await program.methods
-        .updateAdminInfo(new anchor.BN(1000000))
+        .updateAdminInfo(new anchor.BN(MINT_FEE)) // 1 USDC
         .accounts({
           admin: payer.publicKey,
           // adminState: adminState[0],
           newAdmin: payer.publicKey,
+          paymentMint: paymentMint,
+          paymentTokenProgram: TOKEN_PROGRAM_ID,
         })
         .signers([])
         .rpc({ skipPreflight: true });
@@ -163,6 +252,14 @@ describe("extension_nft", () => {
       program.programId
     );
 
+    // Get person's token balance before mint
+    const personTokenBefore = await getAccount(provider.connection, personTokenAccount);
+    console.log("Person USDC balance before mint:", Number(personTokenBefore.amount) / 10 ** PAYMENT_DECIMALS);
+
+    // Get vault balance before mint
+    const vaultBefore = await getAccount(provider.connection, vault);
+    console.log("Vault USDC balance before mint:", Number(vaultBefore.amount) / 10 ** PAYMENT_DECIMALS);
+
     try {
       let tx = await program.methods
         .mintNft(
@@ -181,6 +278,10 @@ describe("extension_nft", () => {
           // userState: userState[0],
           admin: payer.publicKey,
           // rent: anchor.web3.SYSVAR_RENT_PUBKEY,
+          paymentMint: paymentMint,
+          payerTokenAccount: personTokenAccount,
+          // vault: vault,
+          paymentTokenProgram: TOKEN_PROGRAM_ID,
         })
         .signers([mint, person])
         .rpc({ skipPreflight: true });
@@ -195,71 +296,13 @@ describe("extension_nft", () => {
         "Admin state current reserved count",
         adminStateAccount.currentReservedCount.toNumber()
       );
-      await anchor.getProvider().connection.confirmTransaction(tx, "confirmed");
-    } catch (err) {
-      console.log(err);
-    }
-  });
 
-  it("Mint new nft and burn old one!", async () => {
-    let userState = await anchor.web3.PublicKey.findProgramAddress(
-      [Buffer.from("user_state"), person.publicKey.toBuffer()],
-      program.programId
-    );
-    const userStateAccount = await program.account.userState.fetch(
-      userState[0]
-    );
-    let mint = new Keypair();
-    console.log("Mint public key", mint.publicKey.toBase58());
+      // Check token balances after mint
+      const personTokenAfter = await getAccount(provider.connection, personTokenAccount);
+      const vaultAfter = await getAccount(provider.connection, vault);
+      console.log("Person USDC balance after mint:", Number(personTokenAfter.amount) / 10 ** PAYMENT_DECIMALS);
+      console.log("Vault USDC balance after mint:", Number(vaultAfter.amount) / 10 ** PAYMENT_DECIMALS);
 
-    const destinationTokenAccount = getAssociatedTokenAddressSync(
-      mint.publicKey,
-      person.publicKey,
-      false,
-      TOKEN_2022_PROGRAM_ID,
-      ASSOCIATED_TOKEN_PROGRAM_ID
-    );
-
-    let adminState = await anchor.web3.PublicKey.findProgramAddress(
-      [Buffer.from("admin_state")],
-      program.programId
-    );
-
-    const oldMint = userStateAccount.nftAddress;
-    console.log("oldMint", oldMint.toBase58());
-    const oldTokenAccount = getAssociatedTokenAddressSync(
-      oldMint,
-      person.publicKey,
-      false,
-      TOKEN_2022_PROGRAM_ID,
-      ASSOCIATED_TOKEN_PROGRAM_ID
-    );
-    console.log("oldTokenAccount", oldTokenAccount.toBase58());
-    try {
-      let tx = await program.methods
-        .burnAndMintNewNft(
-          "Veintree Reservation",
-          "VT",
-          "https://green-awkward-eagle-887.mypinata.cloud/ipfs/bafkreifipgio6h5rspvmw2mm2f7zbfmktaku7nvsx7wf7rl7zlcw2mvfvu"
-        )
-        .accounts({
-          signer: person.publicKey,
-          // systemProgram: anchor.web3.SystemProgram.programId,
-          // tokenProgram: TOKEN_2022_PROGRAM_ID,
-          // associatedTokenProgram: ASSOCIATED_PROGRAM_ID,
-          oldMint,
-          oldTokenAccount,
-          tokenAccount: destinationTokenAccount,
-          mint: mint.publicKey,
-          // adminState: adminState[0],
-          // userState: userState[0],
-          admin: payer.publicKey,
-          // rent: anchor.web3.SYSVAR_RENT_PUBKEY,
-        })
-        .signers([mint, person])
-        .rpc({ skipPreflight: true });
-
-      console.log("Mint nft tx", tx);
       await anchor.getProvider().connection.confirmTransaction(tx, "confirmed");
     } catch (err) {
       console.log(err);
@@ -319,6 +362,52 @@ describe("extension_nft", () => {
       const reservedAfter = adminStateAfter.currentReservedCount.toNumber();
       console.log(`currentReservedCount before: ${reservedBefore}, after: ${reservedAfter}`);
       assert.strictEqual(reservedAfter, reservedBefore - 1);
+    } catch (err) {
+      console.log(err);
+    }
+  });
+
+  it("Withdraw from vault!", async () => {
+    // Get vault balance before withdrawal
+    const vaultBefore = await getAccount(provider.connection, vault);
+    const vaultBalanceBefore = Number(vaultBefore.amount);
+    console.log("Vault USDC balance before withdraw:", vaultBalanceBefore / 10 ** PAYMENT_DECIMALS);
+
+    // Get admin token account balance before withdrawal
+    const adminTokenBefore = await getAccount(provider.connection, adminTokenAccount);
+    const adminBalanceBefore = Number(adminTokenBefore.amount);
+    console.log("Admin USDC balance before withdraw:", adminBalanceBefore / 10 ** PAYMENT_DECIMALS);
+
+    // Withdraw all tokens from vault
+    const withdrawAmount = vaultBalanceBefore;
+    console.log("Withdrawing:", withdrawAmount / 10 ** PAYMENT_DECIMALS, "USDC");
+
+    try {
+      let tx = await program.methods
+        .withdraw(new anchor.BN(withdrawAmount))
+        .accounts({
+          admin: payer.publicKey,
+          paymentMint: paymentMint,
+          // vault: vault,
+          adminTokenAccount: adminTokenAccount,
+          tokenProgram: TOKEN_PROGRAM_ID,
+        })
+        .signers([])
+        .rpc({ skipPreflight: true });
+
+      console.log("Withdraw tx", tx);
+      await anchor.getProvider().connection.confirmTransaction(tx, "confirmed");
+
+      // Check balances after withdrawal
+      const vaultAfter = await getAccount(provider.connection, vault);
+      const adminTokenAfter = await getAccount(provider.connection, adminTokenAccount);
+      
+      console.log("Vault USDC balance after withdraw:", Number(vaultAfter.amount) / 10 ** PAYMENT_DECIMALS);
+      console.log("Admin USDC balance after withdraw:", Number(adminTokenAfter.amount) / 10 ** PAYMENT_DECIMALS);
+
+      // Verify vault is empty and admin received the tokens
+      assert.strictEqual(Number(vaultAfter.amount), 0);
+      assert.strictEqual(Number(adminTokenAfter.amount), adminBalanceBefore + withdrawAmount);
     } catch (err) {
       console.log(err);
     }

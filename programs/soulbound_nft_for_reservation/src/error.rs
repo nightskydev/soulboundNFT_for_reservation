@@ -16,4 +16,14 @@ pub enum ProgramErrorCode {
     ReservedCountUnderflow,
     #[msg("Invalid admin account")]
     InvalidAdminAccount,
+    #[msg("Invalid payment mint - does not match admin_state.payment_mint")]
+    InvalidPaymentMint,
+    #[msg("Invalid payment token account")]
+    InvalidPaymentTokenAccount,
+    #[msg("Unauthorized - only admin can perform this action")]
+    Unauthorized,
+    #[msg("Invalid withdraw amount - must be greater than 0")]
+    InvalidWithdrawAmount,
+    #[msg("Insufficient vault balance for withdrawal")]
+    InsufficientVaultBalance,
 }

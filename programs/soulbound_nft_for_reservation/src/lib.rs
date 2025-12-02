@@ -34,7 +34,8 @@ pub mod soulbound_nft_for_reservation {
         instructions::burn_nft::handler(ctx)
     }
 
-    pub fn burn_and_mint_new_nft(ctx: Context<BurnAndMintNewNft>, name: String, symbol: String, uri: String) -> Result<()> {
-        instructions::burn_and_mint::handler(ctx, name, symbol, uri)
+    /// Withdraw payment tokens from the vault (admin only)
+    pub fn withdraw(ctx: Context<Withdraw>, amount: u64) -> Result<()> {
+        instructions::withdraw::handler(ctx, amount)
     }
 }

@@ -7,7 +7,7 @@ use anchor_spl::token_2022_extensions::spl_token_metadata_interface;
 use anchor_spl::{
     associated_token::{self, AssociatedToken},
     token_2022,
-    token_interface::{spl_token_2022::instruction::AuthorityType, Token2022},
+    token_interface::{spl_token_2022::instruction::AuthorityType, Token2022, TokenInterface, Mint, TokenAccount, transfer_checked, TransferChecked},
 };
 use solana_program::program::{invoke, invoke_signed};
 
@@ -47,6 +47,35 @@ pub struct MintNft<'info> {
     /// CHECK: This is not dangerous because we don't read or write from this account
     #[account(mut)]
     pub admin: AccountInfo<'info>,
+
+    // === Payment token accounts ===
+    /// The SPL token mint for payment (e.g., USDC) - must match admin_state.payment_mint
+    #[account(
+        constraint = payment_mint.key() == admin_state.payment_mint @ ProgramErrorCode::InvalidPaymentMint
+    )]
+    pub payment_mint: InterfaceAccount<'info, Mint>,
+
+    /// Payer's token account for payment
+    #[account(
+        mut,
+        constraint = payer_token_account.mint == payment_mint.key() @ ProgramErrorCode::InvalidPaymentTokenAccount,
+        constraint = payer_token_account.owner == signer.key() @ ProgramErrorCode::InvalidPaymentTokenAccount
+    )]
+    pub payer_token_account: InterfaceAccount<'info, TokenAccount>,
+
+    /// Vault token account (PDA-controlled) to receive payment - created in init_admin
+    #[account(
+        mut,
+        seeds = [b"vault", payment_mint.key().as_ref()],
+        bump,
+        token::mint = payment_mint,
+        token::authority = admin_state,
+        token::token_program = payment_token_program,
+    )]
+    pub vault: InterfaceAccount<'info, TokenAccount>,
+
+    /// Token program for payment (can be Token or Token2022)
+    pub payment_token_program: Interface<'info, TokenInterface>,
 }
 
 pub fn handler(ctx: Context<MintNft>, name: String, symbol: String, uri: String) -> Result<()> {
@@ -279,29 +308,20 @@ pub fn handler(ctx: Context<MintNft>, name: String, symbol: String, uri: String)
         signer,
     )?;
 
-    // transfer sol
-    let transfer_sol_ix = anchor_lang::solana_program::system_instruction::transfer(
-        &ctx.accounts.signer.key(),
-        &ctx.accounts.admin.key(),
+    // Transfer payment tokens (e.g., USDC) from payer to vault
+    transfer_checked(
+        CpiContext::new(
+            ctx.accounts.payment_token_program.to_account_info(),
+            TransferChecked {
+                from: ctx.accounts.payer_token_account.to_account_info(),
+                mint: ctx.accounts.payment_mint.to_account_info(),
+                to: ctx.accounts.vault.to_account_info(),
+                authority: ctx.accounts.signer.to_account_info(),
+            },
+        ),
         ctx.accounts.admin_state.mint_fee,
-    );
-    anchor_lang::solana_program::program::invoke(
-        &transfer_sol_ix,
-        &[
-            ctx.accounts.signer.to_account_info(),
-            ctx.accounts.admin.to_account_info(),
-        ],
+        ctx.accounts.payment_mint.decimals,
     )?;
-    // **ctx
-    //     .accounts
-    //     .signer
-    //     .to_account_info()
-    //     .try_borrow_mut_lamports()? -= ctx.accounts.admin_state.mint_fee;
-    // **ctx
-    //     .accounts
-    //     .admin
-    //     .to_account_info()
-    //     .try_borrow_mut_lamports()? += ctx.accounts.admin_state.mint_fee;
 
     // store user's info - nft address
     ctx.accounts.user_state.nft_address = ctx.accounts.mint.key();
