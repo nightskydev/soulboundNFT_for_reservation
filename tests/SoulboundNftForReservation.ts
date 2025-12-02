@@ -43,6 +43,9 @@ const userPrivKey = [
 
 const person = anchor.web3.Keypair.fromSecretKey(Uint8Array.from(userPrivKey));
 
+// Separate withdraw wallet (different from admin)
+const withdrawWallet = Keypair.generate();
+
 describe("extension_nft", () => {
   console.log("hehrehrehher")
   // devnet test
@@ -74,6 +77,7 @@ describe("extension_nft", () => {
   let paymentMint: PublicKey;
   let adminTokenAccount: PublicKey;
   let personTokenAccount: PublicKey;
+  let withdrawWalletTokenAccount: PublicKey; // Token account for withdraw wallet
   let vault: PublicKey; // PDA-controlled vault for payment tokens
   const PAYMENT_DECIMALS = 6; // USDC has 6 decimals
   const MINT_FEE = 1_000_000; // 1 USDC (in smallest units)
@@ -110,6 +114,18 @@ describe("extension_nft", () => {
       TOKEN_PROGRAM_ID
     );
     console.log("Admin token account:", adminTokenAccount.toBase58());
+
+    // Create withdraw wallet's token account (separate from admin)
+    withdrawWalletTokenAccount = await createAssociatedTokenAccount(
+      provider.connection,
+      payer.payer,
+      paymentMint,
+      withdrawWallet.publicKey,
+      undefined,
+      TOKEN_PROGRAM_ID
+    );
+    console.log("Withdraw wallet:", withdrawWallet.publicKey.toBase58());
+    console.log("Withdraw wallet token account:", withdrawWalletTokenAccount.toBase58());
 
     // Ensure person wallet has enough SOL
     const balance = await provider.connection.getBalance(person.publicKey);
@@ -153,7 +169,11 @@ describe("extension_nft", () => {
 
     try {
       let tx = await program.methods
-        .initAdmin(new anchor.BN(MINT_FEE), new anchor.BN(MAX_SUPPLY)) // 1 USDC, max 100 NFTs
+        .initAdmin(
+          new anchor.BN(MINT_FEE), 
+          new anchor.BN(MAX_SUPPLY),
+          withdrawWallet.publicKey // withdraw_wallet - separate from admin!
+        )
         .accounts({
           admin: payer.publicKey,
           paymentMint: paymentMint,
@@ -187,6 +207,10 @@ describe("extension_nft", () => {
         "Admin state current reserved count",
         adminStateAccount.currentReservedCount.toNumber()
       );
+      console.log(
+        "Admin state withdraw wallet",
+        adminStateAccount.withdrawWallet.toBase58()
+      );
       console.log("Vault created at:", vault.toBase58());
     } catch (err) {
       console.log(err);
@@ -201,7 +225,11 @@ describe("extension_nft", () => {
 
     try {
       let tx = await program.methods
-        .updateAdminInfo(new anchor.BN(MINT_FEE), new anchor.BN(MAX_SUPPLY)) // 1 USDC, max 100 NFTs
+        .updateAdminInfo(
+          new anchor.BN(MINT_FEE), 
+          new anchor.BN(MAX_SUPPLY),
+          withdrawWallet.publicKey // withdraw_wallet - keep separate from admin
+        )
         .accounts({
           admin: payer.publicKey,
           // adminState: adminState[0],
@@ -371,20 +399,22 @@ describe("extension_nft", () => {
     }
   });
 
-  it("Withdraw from vault!", async () => {
+  it("Withdraw from vault to separate withdraw wallet!", async () => {
     // Get vault balance before withdrawal
     const vaultBefore = await getAccount(provider.connection, vault);
     const vaultBalanceBefore = Number(vaultBefore.amount);
     console.log("Vault USDC balance before withdraw:", vaultBalanceBefore / 10 ** PAYMENT_DECIMALS);
 
-    // Get admin token account balance before withdrawal
-    const adminTokenBefore = await getAccount(provider.connection, adminTokenAccount);
-    const adminBalanceBefore = Number(adminTokenBefore.amount);
-    console.log("Admin USDC balance before withdraw:", adminBalanceBefore / 10 ** PAYMENT_DECIMALS);
+    // Get withdraw wallet's token account balance before withdrawal
+    // withdraw_wallet is a SEPARATE wallet from admin!
+    const withdrawTokenBefore = await getAccount(provider.connection, withdrawWalletTokenAccount);
+    const withdrawBalanceBefore = Number(withdrawTokenBefore.amount);
+    console.log("Withdraw wallet:", withdrawWallet.publicKey.toBase58());
+    console.log("Withdraw wallet USDC balance before withdraw:", withdrawBalanceBefore / 10 ** PAYMENT_DECIMALS);
 
     // Withdraw all tokens from vault
     const withdrawAmount = vaultBalanceBefore;
-    console.log("Withdrawing:", withdrawAmount / 10 ** PAYMENT_DECIMALS, "USDC");
+    console.log("Withdrawing:", withdrawAmount / 10 ** PAYMENT_DECIMALS, "USDC to withdraw wallet");
 
     try {
       let tx = await program.methods
@@ -393,7 +423,7 @@ describe("extension_nft", () => {
           admin: payer.publicKey,
           paymentMint: paymentMint,
           // vault: vault,
-          adminTokenAccount: adminTokenAccount,
+          withdrawTokenAccount: withdrawWalletTokenAccount, // owned by withdrawWallet (NOT admin!)
           tokenProgram: TOKEN_PROGRAM_ID,
         })
         .signers([])
@@ -404,16 +434,93 @@ describe("extension_nft", () => {
 
       // Check balances after withdrawal
       const vaultAfter = await getAccount(provider.connection, vault);
-      const adminTokenAfter = await getAccount(provider.connection, adminTokenAccount);
+      const withdrawTokenAfter = await getAccount(provider.connection, withdrawWalletTokenAccount);
       
       console.log("Vault USDC balance after withdraw:", Number(vaultAfter.amount) / 10 ** PAYMENT_DECIMALS);
-      console.log("Admin USDC balance after withdraw:", Number(adminTokenAfter.amount) / 10 ** PAYMENT_DECIMALS);
+      console.log("Withdraw wallet USDC balance after withdraw:", Number(withdrawTokenAfter.amount) / 10 ** PAYMENT_DECIMALS);
 
-      // Verify vault is empty and admin received the tokens
+      // Verify vault is empty and withdraw wallet received the tokens
       assert.strictEqual(Number(vaultAfter.amount), 0);
-      assert.strictEqual(Number(adminTokenAfter.amount), adminBalanceBefore + withdrawAmount);
+      assert.strictEqual(Number(withdrawTokenAfter.amount), withdrawBalanceBefore + withdrawAmount);
+      console.log("✓ Funds successfully withdrawn to separate withdraw wallet!");
     } catch (err) {
       console.log(err);
+    }
+  });
+
+  it("Withdraw should FAIL if token account owner doesn't match withdraw_wallet!", async () => {
+    // First, mint another NFT to get some tokens in vault
+    let mint = new Keypair();
+    const destinationTokenAccount = getAssociatedTokenAddressSync(
+      mint.publicKey,
+      person.publicKey,
+      false,
+      TOKEN_2022_PROGRAM_ID,
+      ASSOCIATED_TOKEN_PROGRAM_ID
+    );
+
+    // Mint more USDC to person for another mint
+    await mintTo(
+      provider.connection,
+      payer.payer,
+      paymentMint,
+      personTokenAccount,
+      payer.publicKey,
+      10 * 10 ** PAYMENT_DECIMALS,
+      [],
+      undefined,
+      TOKEN_PROGRAM_ID
+    );
+
+    // Burn existing NFT first so person can mint again
+    const [userState] = await anchor.web3.PublicKey.findProgramAddress(
+      [Buffer.from("user_state"), person.publicKey.toBuffer()],
+      program.programId
+    );
+
+    // Mint new NFT
+    await program.methods
+      .mintNft("Test NFT", "TEST", "https://example.com")
+      .accounts({
+        signer: person.publicKey,
+        tokenAccount: destinationTokenAccount,
+        mint: mint.publicKey,
+        admin: payer.publicKey,
+        paymentMint: paymentMint,
+        payerTokenAccount: personTokenAccount,
+        paymentTokenProgram: TOKEN_PROGRAM_ID,
+      })
+      .signers([mint, person])
+      .rpc({ skipPreflight: true });
+
+    console.log("Minted another NFT to get tokens in vault");
+
+    // Now try to withdraw to admin's token account (which is NOT owned by withdraw_wallet)
+    const vaultBalance = await getAccount(provider.connection, vault);
+    const withdrawAmount = Number(vaultBalance.amount);
+
+    try {
+      await program.methods
+        .withdraw(new anchor.BN(withdrawAmount))
+        .accounts({
+          admin: payer.publicKey,
+          paymentMint: paymentMint,
+          withdrawTokenAccount: adminTokenAccount, // This should FAIL - owned by admin, not withdraw_wallet
+          tokenProgram: TOKEN_PROGRAM_ID,
+        })
+        .signers([])
+        .rpc({ skipPreflight: true });
+
+      assert.fail("Expected InvalidWithdrawWallet error but withdraw succeeded");
+    } catch (err: any) {
+      console.log("Expected error received:", err.message?.substring(0, 100));
+      assert.ok(
+        err.message.includes("InvalidWithdrawWallet") ||
+        err.message.includes("0x177d") ||
+        err.logs?.some((log: string) => log.includes("InvalidWithdrawWallet")),
+        "Expected InvalidWithdrawWallet error"
+      );
+      console.log("✓ Correctly rejected withdraw to wrong wallet!");
     }
   });
 });

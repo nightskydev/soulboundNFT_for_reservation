@@ -28,4 +28,6 @@ pub enum ProgramErrorCode {
     InsufficientVaultBalance,
     #[msg("Max supply reached - no more NFTs can be minted")]
     MaxSupplyReached,
+    #[msg("Invalid withdraw wallet - token account owner must match admin_state.withdraw_wallet")]
+    InvalidWithdrawWallet,
 }

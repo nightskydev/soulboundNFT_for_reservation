@@ -18,12 +18,12 @@ declare_id!("H1frppnuiTXeGNk34HmcRtuK3SDUokpGK3az76JjNzYe");
 pub mod soulbound_nft_for_reservation {
     use super::*;
 
-    pub fn init_admin(ctx: Context<InitAdmin>, mint_fee: u64, max_supply: u64) -> Result<()> {
-        instructions::init_admin::handler(ctx, mint_fee, max_supply)
+    pub fn init_admin(ctx: Context<InitAdmin>, mint_fee: u64, max_supply: u64, withdraw_wallet: Pubkey) -> Result<()> {
+        instructions::init_admin::handler(ctx, mint_fee, max_supply, withdraw_wallet)
     }
 
-    pub fn update_admin_info(ctx: Context<UpdateAdminInfo>, mint_fee: u64, max_supply: u64) -> Result<()> {
-        instructions::update_admin::handler(ctx, mint_fee, max_supply)
+    pub fn update_admin_info(ctx: Context<UpdateAdminInfo>, mint_fee: u64, max_supply: u64, withdraw_wallet: Pubkey) -> Result<()> {
+        instructions::update_admin::handler(ctx, mint_fee, max_supply, withdraw_wallet)
     }
 
     pub fn mint_nft(ctx: Context<MintNft>, name: String, symbol: String, uri: String) -> Result<()> {

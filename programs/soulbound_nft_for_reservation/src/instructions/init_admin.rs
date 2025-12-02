@@ -45,15 +45,17 @@ pub struct InitAdmin<'info> {
     pub rent: Sysvar<'info, Rent>,
 }
 
-pub fn handler(ctx: Context<InitAdmin>, mint_fee: u64, max_supply: u64) -> Result<()> {
+pub fn handler(ctx: Context<InitAdmin>, mint_fee: u64, max_supply: u64, withdraw_wallet: Pubkey) -> Result<()> {
     ctx.accounts.admin_state.admin = *ctx.accounts.admin.key; // admin wallet address
+    ctx.accounts.admin_state.withdraw_wallet = withdraw_wallet; // wallet to receive withdrawn funds
     ctx.accounts.admin_state.mint_fee = mint_fee; // mint fee in token smallest units
     ctx.accounts.admin_state.bump = ctx.bumps.admin_state; // need to store bump for generate seeds
     ctx.accounts.admin_state.current_reserved_count = 0; // initialize reserved count
     ctx.accounts.admin_state.payment_mint = ctx.accounts.payment_mint.key(); // payment token mint (e.g., USDC)
     ctx.accounts.admin_state.max_supply = max_supply; // max supply (0 = unlimited)
 
-    msg!("Admin initialized with vault at: {}, max_supply: {}", ctx.accounts.vault.key(), max_supply);
+    msg!("Admin initialized with vault at: {}, max_supply: {}, withdraw_wallet: {}", 
+        ctx.accounts.vault.key(), max_supply, withdraw_wallet);
 
     Ok(())
 }

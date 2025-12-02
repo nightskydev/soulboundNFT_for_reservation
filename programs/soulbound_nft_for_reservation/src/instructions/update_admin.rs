@@ -22,7 +22,7 @@ pub struct UpdateAdminInfo<'info> {
     pub admin_state: Box<Account<'info, AdminState>>,
 }
 
-pub fn handler(ctx: Context<UpdateAdminInfo>, mint_fee: u64, max_supply: u64) -> Result<()> {
+pub fn handler(ctx: Context<UpdateAdminInfo>, mint_fee: u64, max_supply: u64, withdraw_wallet: Pubkey) -> Result<()> {
     // Validate that new_admin is not a system program
     require!(
         ctx.accounts.new_admin.key() != anchor_lang::solana_program::system_program::id(),
@@ -30,6 +30,7 @@ pub fn handler(ctx: Context<UpdateAdminInfo>, mint_fee: u64, max_supply: u64) ->
     );
 
     ctx.accounts.admin_state.admin = *ctx.accounts.new_admin.key; // update new admin
+    ctx.accounts.admin_state.withdraw_wallet = withdraw_wallet; // update withdraw wallet
     ctx.accounts.admin_state.mint_fee = mint_fee; // update mint fee in token smallest units
     ctx.accounts.admin_state.max_supply = max_supply; // update max supply (0 = unlimited)
     // NOTE: payment_mint cannot be changed because the vault PDA is derived from it.

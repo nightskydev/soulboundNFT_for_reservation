@@ -37,20 +37,22 @@ pub struct Withdraw<'info> {
     )]
     pub vault: InterfaceAccount<'info, TokenAccount>,
 
-    /// Admin's token account to receive withdrawn tokens
+    /// Withdraw wallet's token account to receive withdrawn tokens
+    /// Must be owned by admin_state.withdraw_wallet
     #[account(
         mut,
-        constraint = admin_token_account.mint == payment_mint.key() @ ProgramErrorCode::InvalidPaymentTokenAccount,
-        constraint = admin_token_account.owner == admin.key() @ ProgramErrorCode::InvalidPaymentTokenAccount
+        constraint = withdraw_token_account.mint == payment_mint.key() @ ProgramErrorCode::InvalidPaymentTokenAccount,
+        constraint = withdraw_token_account.owner == admin_state.withdraw_wallet @ ProgramErrorCode::InvalidWithdrawWallet
     )]
-    pub admin_token_account: InterfaceAccount<'info, TokenAccount>,
+    pub withdraw_token_account: InterfaceAccount<'info, TokenAccount>,
 
     /// Token program for payment (can be Token or Token2022)
     pub token_program: Interface<'info, TokenInterface>,
 }
 
 pub fn handler(ctx: Context<Withdraw>, amount: u64) -> Result<()> {
-    msg!("Withdrawing {} tokens from vault", amount);
+    msg!("Withdrawing {} tokens from vault to withdraw wallet: {}", 
+        amount, ctx.accounts.admin_state.withdraw_wallet);
 
     // Validate amount
     require!(amount > 0, ProgramErrorCode::InvalidWithdrawAmount);
@@ -64,14 +66,14 @@ pub fn handler(ctx: Context<Withdraw>, amount: u64) -> Result<()> {
     let bump = ctx.bumps.admin_state;
     let signer_seeds: &[&[&[u8]]] = &[&[seeds, &[bump]]];
 
-    // Transfer tokens from vault to admin's token account
+    // Transfer tokens from vault to withdraw wallet's token account
     transfer_checked(
         CpiContext::new_with_signer(
             ctx.accounts.token_program.to_account_info(),
             TransferChecked {
                 from: ctx.accounts.vault.to_account_info(),
                 mint: ctx.accounts.payment_mint.to_account_info(),
-                to: ctx.accounts.admin_token_account.to_account_info(),
+                to: ctx.accounts.withdraw_token_account.to_account_info(),
                 authority: ctx.accounts.admin_state.to_account_info(),
             },
             signer_seeds,
@@ -81,8 +83,9 @@ pub fn handler(ctx: Context<Withdraw>, amount: u64) -> Result<()> {
     )?;
 
     msg!(
-        "Successfully withdrew {} tokens. Remaining vault balance: {}",
+        "Successfully withdrew {} tokens to {}. Remaining vault balance: {}",
         amount,
+        ctx.accounts.admin_state.withdraw_wallet,
         ctx.accounts.vault.amount - amount
     );
 
