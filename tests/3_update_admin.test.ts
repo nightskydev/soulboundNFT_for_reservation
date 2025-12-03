@@ -16,7 +16,9 @@ describe("update_admin", () => {
         .updateAdminInfo(
           new anchor.BN(newMintFee),
           new anchor.BN(ctx.MAX_SUPPLY),
-          new anchor.BN(0)
+          new anchor.BN(0),
+          new anchor.BN(ctx.DONGLE_PRICE_NFT_HOLDER),
+          new anchor.BN(ctx.DONGLE_PRICE_NORMAL)
         )
         .accounts({
           superAdmin: ctx.superAdmin.publicKey,
@@ -43,7 +45,9 @@ describe("update_admin", () => {
         .updateAdminInfo(
           new anchor.BN(ctx.MINT_FEE * 2),
           new anchor.BN(newMaxSupply),
-          new anchor.BN(0)
+          new anchor.BN(0),
+          new anchor.BN(ctx.DONGLE_PRICE_NFT_HOLDER),
+          new anchor.BN(ctx.DONGLE_PRICE_NORMAL)
         )
         .accounts({
           superAdmin: ctx.superAdmin.publicKey,
@@ -66,7 +70,9 @@ describe("update_admin", () => {
         .updateAdminInfo(
           new anchor.BN(ctx.MINT_FEE * 2),
           new anchor.BN(ctx.MAX_SUPPLY),
-          new anchor.BN(0)
+          new anchor.BN(0),
+          new anchor.BN(ctx.DONGLE_PRICE_NFT_HOLDER),
+          new anchor.BN(ctx.DONGLE_PRICE_NORMAL)
         )
         .accounts({
           superAdmin: ctx.superAdmin.publicKey,
@@ -82,7 +88,9 @@ describe("update_admin", () => {
         .updateAdminInfo(
           new anchor.BN(ctx.MINT_FEE * 2),
           new anchor.BN(ctx.MAX_SUPPLY),
-          new anchor.BN(futureTimestamp)
+          new anchor.BN(futureTimestamp),
+          new anchor.BN(ctx.DONGLE_PRICE_NFT_HOLDER),
+          new anchor.BN(ctx.DONGLE_PRICE_NORMAL)
         )
         .accounts({
           superAdmin: ctx.superAdmin.publicKey,
@@ -108,7 +116,58 @@ describe("update_admin", () => {
         .updateAdminInfo(
           new anchor.BN(ctx.MINT_FEE * 2),
           new anchor.BN(ctx.MAX_SUPPLY),
-          new anchor.BN(0)
+          new anchor.BN(0),
+          new anchor.BN(ctx.DONGLE_PRICE_NFT_HOLDER),
+          new anchor.BN(ctx.DONGLE_PRICE_NORMAL)
+        )
+        .accounts({
+          superAdmin: ctx.superAdmin.publicKey,
+          newSuperAdmin: ctx.superAdmin.publicKey,
+        })
+        .rpc({ skipPreflight: true });
+    });
+
+    it("should update dongle prices", async () => {
+      const newDonglePriceNftHolder = 50_000_000; // 50 USDC
+      const newDonglePriceNormal = 250_000_000; // 250 USDC
+
+      const tx = await ctx.program.methods
+        .updateAdminInfo(
+          new anchor.BN(ctx.MINT_FEE * 2),
+          new anchor.BN(ctx.MAX_SUPPLY),
+          new anchor.BN(0),
+          new anchor.BN(newDonglePriceNftHolder),
+          new anchor.BN(newDonglePriceNormal)
+        )
+        .accounts({
+          superAdmin: ctx.superAdmin.publicKey,
+          newSuperAdmin: ctx.superAdmin.publicKey,
+        })
+        .rpc({ skipPreflight: true });
+
+      await ctx.provider.connection.confirmTransaction(tx, "confirmed");
+
+      const state = await ctx.fetchAdminState();
+      assert.strictEqual(
+        state.donglePriceNftHolder.toNumber(),
+        newDonglePriceNftHolder,
+        "Dongle price for NFT holder should be updated"
+      );
+      assert.strictEqual(
+        state.donglePriceNormal.toNumber(),
+        newDonglePriceNormal,
+        "Dongle price for normal user should be updated"
+      );
+      console.log("✓ Dongle prices updated - NFT holder:", newDonglePriceNftHolder, ", Normal:", newDonglePriceNormal);
+
+      // Restore original values
+      await ctx.program.methods
+        .updateAdminInfo(
+          new anchor.BN(ctx.MINT_FEE * 2),
+          new anchor.BN(ctx.MAX_SUPPLY),
+          new anchor.BN(0),
+          new anchor.BN(ctx.DONGLE_PRICE_NFT_HOLDER),
+          new anchor.BN(ctx.DONGLE_PRICE_NORMAL)
         )
         .accounts({
           superAdmin: ctx.superAdmin.publicKey,
@@ -130,7 +189,9 @@ describe("update_admin", () => {
         .updateAdminInfo(
           new anchor.BN(ctx.MINT_FEE * 2),
           new anchor.BN(ctx.MAX_SUPPLY),
-          new anchor.BN(0)
+          new anchor.BN(0),
+          new anchor.BN(ctx.DONGLE_PRICE_NFT_HOLDER),
+          new anchor.BN(ctx.DONGLE_PRICE_NORMAL)
         )
         .accounts({
           superAdmin: ctx.superAdmin.publicKey,
@@ -151,7 +212,9 @@ describe("update_admin", () => {
         .updateAdminInfo(
           new anchor.BN(ctx.MINT_FEE * 2),
           new anchor.BN(ctx.MAX_SUPPLY),
-          new anchor.BN(0)
+          new anchor.BN(0),
+          new anchor.BN(ctx.DONGLE_PRICE_NFT_HOLDER),
+          new anchor.BN(ctx.DONGLE_PRICE_NORMAL)
         )
         .accounts({
           superAdmin: newSuperAdmin.publicKey,
@@ -185,7 +248,9 @@ describe("update_admin", () => {
           .updateAdminInfo(
             new anchor.BN(ctx.MINT_FEE),
             new anchor.BN(ctx.MAX_SUPPLY),
-            new anchor.BN(0)
+            new anchor.BN(0),
+            new anchor.BN(ctx.DONGLE_PRICE_NFT_HOLDER),
+            new anchor.BN(ctx.DONGLE_PRICE_NORMAL)
           )
           .accounts({
             superAdmin: randomUser.publicKey,
@@ -208,7 +273,9 @@ describe("update_admin", () => {
           .updateAdminInfo(
             new anchor.BN(ctx.MINT_FEE),
             new anchor.BN(ctx.MAX_SUPPLY),
-            new anchor.BN(0)
+            new anchor.BN(0),
+            new anchor.BN(ctx.DONGLE_PRICE_NFT_HOLDER),
+            new anchor.BN(ctx.DONGLE_PRICE_NORMAL)
           )
           .accounts({
             superAdmin: ctx.superAdmin.publicKey,

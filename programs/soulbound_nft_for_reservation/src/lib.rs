@@ -19,8 +19,16 @@ pub mod soulbound_nft_for_reservation {
     use super::*;
 
     /// Initialize admin state (super_admin only, one-time setup)
-    pub fn init_admin(ctx: Context<InitAdmin>, mint_fee: u64, max_supply: u64, withdraw_wallet: Pubkey, mint_start_date: i64) -> Result<()> {
-        instructions::init_admin::handler(ctx, mint_fee, max_supply, withdraw_wallet, mint_start_date)
+    pub fn init_admin(
+        ctx: Context<InitAdmin>, 
+        mint_fee: u64, 
+        max_supply: u64, 
+        withdraw_wallet: Pubkey, 
+        mint_start_date: i64,
+        dongle_price_nft_holder: u64,
+        dongle_price_normal: u64,
+    ) -> Result<()> {
+        instructions::init_admin::handler(ctx, mint_fee, max_supply, withdraw_wallet, mint_start_date, dongle_price_nft_holder, dongle_price_normal)
     }
 
     /// Set vice admin wallets (super_admin only)
@@ -28,9 +36,16 @@ pub mod soulbound_nft_for_reservation {
         instructions::set_vice_admins::handler(ctx, vice_admins)
     }
 
-    /// Update admin settings like mint_fee, max_supply, and mint_start_date (super_admin only)
-    pub fn update_admin_info(ctx: Context<UpdateAdminInfo>, mint_fee: u64, max_supply: u64, mint_start_date: i64) -> Result<()> {
-        instructions::update_admin::handler(ctx, mint_fee, max_supply, mint_start_date)
+    /// Update admin settings like mint_fee, max_supply, mint_start_date, and dongle prices (super_admin only)
+    pub fn update_admin_info(
+        ctx: Context<UpdateAdminInfo>, 
+        mint_fee: u64, 
+        max_supply: u64, 
+        mint_start_date: i64,
+        dongle_price_nft_holder: u64,
+        dongle_price_normal: u64,
+    ) -> Result<()> {
+        instructions::update_admin::handler(ctx, mint_fee, max_supply, mint_start_date, dongle_price_nft_holder, dongle_price_normal)
     }
 
     /// Propose or approve withdraw wallet update (3 of 5 multisig required)
@@ -56,5 +71,10 @@ pub mod soulbound_nft_for_reservation {
     /// Withdraw payment tokens from the vault (super_admin only)
     pub fn withdraw(ctx: Context<Withdraw>, amount: u64) -> Result<()> {
         instructions::withdraw::handler(ctx, amount)
+    }
+
+    /// Purchase a dongle - NFT holders pay discounted price, normal users pay full price
+    pub fn purchase_dongle(ctx: Context<PurchaseDongle>) -> Result<()> {
+        instructions::purchase_dongle::handler(ctx)
     }
 }

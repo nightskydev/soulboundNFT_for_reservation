@@ -15,6 +15,10 @@ pub struct AdminState {
     // Multisig fields for withdraw wallet update
     pub pending_withdraw_wallet: Pubkey, // proposed new withdraw wallet (zero = no pending proposal)
     pub approval_bitmap: u8, // bit 0 = super_admin, bits 1-4 = vice_admins[0-3]
+    
+    // Dongle pricing
+    pub dongle_price_nft_holder: u64, // dongle price for soulbound NFT holders (e.g., 100 USDC)
+    pub dongle_price_normal: u64, // dongle price for normal users without NFT (e.g., 499 USDC)
 }
 
 impl AdminState {
@@ -32,7 +36,9 @@ impl AdminState {
         8 +         // max_supply
         8 +         // mint_start_date
         32 +        // pending_withdraw_wallet
-        1           // approval_bitmap
+        1 +         // approval_bitmap
+        8 +         // dongle_price_nft_holder
+        8           // dongle_price_normal
     }
 
     /// Check if a signer is part of the multisig (super_admin or vice_admin)

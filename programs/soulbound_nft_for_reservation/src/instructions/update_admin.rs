@@ -22,7 +22,14 @@ pub struct UpdateAdminInfo<'info> {
     pub admin_state: Box<Account<'info, AdminState>>,
 }
 
-pub fn handler(ctx: Context<UpdateAdminInfo>, mint_fee: u64, max_supply: u64, mint_start_date: i64) -> Result<()> {
+pub fn handler(
+    ctx: Context<UpdateAdminInfo>, 
+    mint_fee: u64, 
+    max_supply: u64, 
+    mint_start_date: i64,
+    dongle_price_nft_holder: u64,
+    dongle_price_normal: u64,
+) -> Result<()> {
     // Validate that new_super_admin is not a system program
     require!(
         ctx.accounts.new_super_admin.key() != anchor_lang::solana_program::system_program::id(),
@@ -33,12 +40,15 @@ pub fn handler(ctx: Context<UpdateAdminInfo>, mint_fee: u64, max_supply: u64, mi
     ctx.accounts.admin_state.mint_fee = mint_fee;
     ctx.accounts.admin_state.max_supply = max_supply;
     ctx.accounts.admin_state.mint_start_date = mint_start_date;
+    ctx.accounts.admin_state.dongle_price_nft_holder = dongle_price_nft_holder;
+    ctx.accounts.admin_state.dongle_price_normal = dongle_price_normal;
     
     // NOTE: payment_mint cannot be changed because the vault PDA is derived from it.
     // NOTE: withdraw_wallet requires 3/5 multisig approval via update_withdraw_wallet.
     // NOTE: vice_admins are set separately via set_vice_admins.
     
     msg!("Admin settings updated. Super admin: {}, mint_start_date: {}", ctx.accounts.new_super_admin.key(), mint_start_date);
+    msg!("Dongle prices - NFT holder: {}, Normal: {}", dongle_price_nft_holder, dongle_price_normal);
     
     Ok(())
 }

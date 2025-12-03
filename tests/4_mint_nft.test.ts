@@ -24,7 +24,9 @@ describe("mint_nft", () => {
         .updateAdminInfo(
           new anchor.BN(ctx.MINT_FEE * 2),
           new anchor.BN(ctx.MAX_SUPPLY),
-          new anchor.BN(futureTimestamp)
+          new anchor.BN(futureTimestamp),
+          new anchor.BN(ctx.DONGLE_PRICE_NFT_HOLDER),
+          new anchor.BN(ctx.DONGLE_PRICE_NORMAL)
         )
         .accounts({
           superAdmin: ctx.superAdmin.publicKey,
@@ -69,7 +71,9 @@ describe("mint_nft", () => {
           .updateAdminInfo(
             new anchor.BN(ctx.MINT_FEE * 2),
             new anchor.BN(ctx.MAX_SUPPLY),
-            new anchor.BN(0)
+            new anchor.BN(0),
+            new anchor.BN(ctx.DONGLE_PRICE_NFT_HOLDER),
+            new anchor.BN(ctx.DONGLE_PRICE_NORMAL)
           )
           .accounts({
             superAdmin: ctx.superAdmin.publicKey,
@@ -236,7 +240,9 @@ describe("mint_nft", () => {
         .updateAdminInfo(
           new anchor.BN(ctx.MINT_FEE * 2),
           new anchor.BN(1), // Set max supply to 1 (already minted 1)
-          new anchor.BN(0)
+          new anchor.BN(0),
+          new anchor.BN(ctx.DONGLE_PRICE_NFT_HOLDER),
+          new anchor.BN(ctx.DONGLE_PRICE_NORMAL)
         )
         .accounts({
           superAdmin: ctx.superAdmin.publicKey,
@@ -276,7 +282,9 @@ describe("mint_nft", () => {
           .updateAdminInfo(
             new anchor.BN(ctx.MINT_FEE * 2),
             new anchor.BN(ctx.MAX_SUPPLY),
-            new anchor.BN(0)
+            new anchor.BN(0),
+            new anchor.BN(ctx.DONGLE_PRICE_NFT_HOLDER),
+            new anchor.BN(ctx.DONGLE_PRICE_NORMAL)
           )
           .accounts({
             superAdmin: ctx.superAdmin.publicKey,

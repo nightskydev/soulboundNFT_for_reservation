@@ -49,6 +49,8 @@ export class TestContext {
   readonly PAYMENT_DECIMALS = 6;
   readonly MINT_FEE = 1_000_000; // 1 USDC
   readonly MAX_SUPPLY = 100;
+  readonly DONGLE_PRICE_NFT_HOLDER = 100_000_000; // 100 USDC
+  readonly DONGLE_PRICE_NORMAL = 499_000_000; // 499 USDC
 
   private constructor() {
     this.provider = anchor.AnchorProvider.env();

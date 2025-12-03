@@ -15,7 +15,9 @@ describe("init_admin", () => {
           new anchor.BN(ctx.MINT_FEE),
           new anchor.BN(ctx.MAX_SUPPLY),
           ctx.withdrawWallet.publicKey,
-          new anchor.BN(0) // mint_start_date: 0 = no restriction
+          new anchor.BN(0), // mint_start_date: 0 = no restriction
+          new anchor.BN(ctx.DONGLE_PRICE_NFT_HOLDER),
+          new anchor.BN(ctx.DONGLE_PRICE_NORMAL)
         )
         .accounts({
           superAdmin: ctx.superAdmin.publicKey,
@@ -34,6 +36,8 @@ describe("init_admin", () => {
       console.log("Max supply:", state.maxSupply.toString());
       console.log("Mint start date:", state.mintStartDate.toString());
       console.log("Payment mint:", state.paymentMint.toBase58());
+      console.log("Dongle price (NFT holder):", state.donglePriceNftHolder.toString());
+      console.log("Dongle price (Normal):", state.donglePriceNormal.toString());
 
       assert.strictEqual(
         state.superAdmin.toBase58(),
@@ -70,6 +74,16 @@ describe("init_admin", () => {
         0,
         "Current reserved count should be 0"
       );
+      assert.strictEqual(
+        state.donglePriceNftHolder.toNumber(),
+        ctx.DONGLE_PRICE_NFT_HOLDER,
+        "Dongle price for NFT holder should match"
+      );
+      assert.strictEqual(
+        state.donglePriceNormal.toNumber(),
+        ctx.DONGLE_PRICE_NORMAL,
+        "Dongle price for normal user should match"
+      );
     });
   });
 
@@ -82,7 +96,9 @@ describe("init_admin", () => {
             new anchor.BN(ctx.MINT_FEE),
             new anchor.BN(ctx.MAX_SUPPLY),
             ctx.withdrawWallet.publicKey,
-            new anchor.BN(0)
+            new anchor.BN(0),
+            new anchor.BN(ctx.DONGLE_PRICE_NFT_HOLDER),
+            new anchor.BN(ctx.DONGLE_PRICE_NORMAL)
           )
           .accounts({
             superAdmin: ctx.superAdmin.publicKey,
