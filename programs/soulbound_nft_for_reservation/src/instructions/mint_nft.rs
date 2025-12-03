@@ -33,7 +33,6 @@ pub struct MintNft<'info> {
         mut,
         seeds = [b"admin_state".as_ref()],
         bump,
-        constraint = admin_state.super_admin == super_admin.key()
     )]
     pub admin_state: Account<'info, AdminState>,
     #[account(
@@ -44,9 +43,6 @@ pub struct MintNft<'info> {
         space = UserState::space()
     )]
     pub user_state: Box<Account<'info, UserState>>,
-    /// CHECK: This is not dangerous because we don't read or write from this account
-    #[account(mut)]
-    pub super_admin: AccountInfo<'info>,
 
     // === Payment token accounts ===
     /// The SPL token mint for payment (e.g., USDC) - must match admin_state.payment_mint
@@ -80,6 +76,16 @@ pub struct MintNft<'info> {
 
 pub fn handler(ctx: Context<MintNft>, name: String, symbol: String, uri: String) -> Result<()> {
     msg!("Mint nft with meta data extension and additional meta data");
+
+    // Check mint start date (0 = no restriction)
+    let mint_start_date = ctx.accounts.admin_state.mint_start_date;
+    if mint_start_date > 0 {
+        let clock = Clock::get()?;
+        require!(
+            clock.unix_timestamp >= mint_start_date,
+            ProgramErrorCode::MintNotStarted
+        );
+    }
 
     // Validate that user doesn't already have an NFT
     require!(

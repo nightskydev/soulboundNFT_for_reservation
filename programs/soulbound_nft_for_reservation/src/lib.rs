@@ -19,8 +19,8 @@ pub mod soulbound_nft_for_reservation {
     use super::*;
 
     /// Initialize admin state (super_admin only, one-time setup)
-    pub fn init_admin(ctx: Context<InitAdmin>, mint_fee: u64, max_supply: u64, withdraw_wallet: Pubkey) -> Result<()> {
-        instructions::init_admin::handler(ctx, mint_fee, max_supply, withdraw_wallet)
+    pub fn init_admin(ctx: Context<InitAdmin>, mint_fee: u64, max_supply: u64, withdraw_wallet: Pubkey, mint_start_date: i64) -> Result<()> {
+        instructions::init_admin::handler(ctx, mint_fee, max_supply, withdraw_wallet, mint_start_date)
     }
 
     /// Set vice admin wallets (super_admin only)
@@ -28,9 +28,9 @@ pub mod soulbound_nft_for_reservation {
         instructions::set_vice_admins::handler(ctx, vice_admins)
     }
 
-    /// Update admin settings like mint_fee and max_supply (super_admin only)
-    pub fn update_admin_info(ctx: Context<UpdateAdminInfo>, mint_fee: u64, max_supply: u64) -> Result<()> {
-        instructions::update_admin::handler(ctx, mint_fee, max_supply)
+    /// Update admin settings like mint_fee, max_supply, and mint_start_date (super_admin only)
+    pub fn update_admin_info(ctx: Context<UpdateAdminInfo>, mint_fee: u64, max_supply: u64, mint_start_date: i64) -> Result<()> {
+        instructions::update_admin::handler(ctx, mint_fee, max_supply, mint_start_date)
     }
 
     /// Propose or approve withdraw wallet update (3 of 5 multisig required)

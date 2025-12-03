@@ -10,6 +10,7 @@ pub struct AdminState {
     pub current_reserved_count: u64, // current number of reserved NFTs
     pub payment_mint: Pubkey, // SPL token mint address for payment (e.g., USDC)
     pub max_supply: u64, // maximum number of NFTs that can be minted (0 = unlimited)
+    pub mint_start_date: i64, // Unix timestamp when minting starts (0 = no restriction)
     
     // Multisig fields for withdraw wallet update
     pub pending_withdraw_wallet: Pubkey, // proposed new withdraw wallet (zero = no pending proposal)
@@ -29,6 +30,7 @@ impl AdminState {
         8 +         // current_reserved_count
         32 +        // payment_mint
         8 +         // max_supply
+        8 +         // mint_start_date
         32 +        // pending_withdraw_wallet
         1           // approval_bitmap
     }

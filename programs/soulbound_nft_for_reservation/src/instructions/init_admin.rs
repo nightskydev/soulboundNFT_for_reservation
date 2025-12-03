@@ -44,7 +44,7 @@ pub struct InitAdmin<'info> {
     pub rent: Sysvar<'info, Rent>,
 }
 
-pub fn handler(ctx: Context<InitAdmin>, mint_fee: u64, max_supply: u64, withdraw_wallet: Pubkey) -> Result<()> {
+pub fn handler(ctx: Context<InitAdmin>, mint_fee: u64, max_supply: u64, withdraw_wallet: Pubkey, mint_start_date: i64) -> Result<()> {
     ctx.accounts.admin_state.bump = ctx.bumps.admin_state;
     ctx.accounts.admin_state.super_admin = *ctx.accounts.super_admin.key;
     ctx.accounts.admin_state.vice_admins = [Pubkey::default(); 4]; // Initialize empty, set later
@@ -53,11 +53,12 @@ pub fn handler(ctx: Context<InitAdmin>, mint_fee: u64, max_supply: u64, withdraw
     ctx.accounts.admin_state.current_reserved_count = 0;
     ctx.accounts.admin_state.payment_mint = ctx.accounts.payment_mint.key();
     ctx.accounts.admin_state.max_supply = max_supply;
+    ctx.accounts.admin_state.mint_start_date = mint_start_date;
     ctx.accounts.admin_state.pending_withdraw_wallet = Pubkey::default();
     ctx.accounts.admin_state.approval_bitmap = 0;
 
-    msg!("Admin initialized with vault at: {}, max_supply: {}, withdraw_wallet: {}", 
-        ctx.accounts.vault.key(), max_supply, withdraw_wallet);
+    msg!("Admin initialized with vault at: {}, max_supply: {}, withdraw_wallet: {}, mint_start_date: {}", 
+        ctx.accounts.vault.key(), max_supply, withdraw_wallet, mint_start_date);
     msg!("Super admin: {}. Vice admins need to be set separately.", ctx.accounts.super_admin.key);
 
     Ok(())

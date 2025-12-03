@@ -42,4 +42,6 @@ pub enum ProgramErrorCode {
     InvalidViceAdmin,
     #[msg("Duplicate vice admin addresses not allowed")]
     DuplicateViceAdmin,
+    #[msg("Minting has not started yet")]
+    MintNotStarted,
 }
