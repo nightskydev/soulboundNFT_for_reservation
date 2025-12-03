@@ -8,11 +8,6 @@ pub struct UpdateAdminInfo<'info> {
     /// Only super_admin can update admin settings
     #[account(mut)]
     pub super_admin: Signer<'info>,
-
-    /// CHECK: Validated in handler that this is not a system program
-    #[account(mut)]
-    pub new_super_admin: AccountInfo<'info>,
-
     #[account(
         mut,
         seeds = [b"admin_state".as_ref()],
@@ -22,33 +17,38 @@ pub struct UpdateAdminInfo<'info> {
     pub admin_state: Box<Account<'info, AdminState>>,
 }
 
-pub fn handler(
-    ctx: Context<UpdateAdminInfo>, 
-    mint_fee: u64, 
-    max_supply: u64, 
-    mint_start_date: i64,
-    dongle_price_nft_holder: u64,
-    dongle_price_normal: u64,
-) -> Result<()> {
-    // Validate that new_super_admin is not a system program
-    require!(
-        ctx.accounts.new_super_admin.key() != anchor_lang::solana_program::system_program::id(),
-        ProgramErrorCode::InvalidAdminAccount
-    );
-
-    ctx.accounts.admin_state.super_admin = *ctx.accounts.new_super_admin.key;
+pub fn update_mint_fee_handler(ctx: Context<UpdateAdminInfo>, mint_fee: u64) -> Result<()> {
     ctx.accounts.admin_state.mint_fee = mint_fee;
+    msg!("Mint fee updated to: {}", mint_fee);
+    Ok(())
+}
+
+pub fn update_max_supply_handler(ctx: Context<UpdateAdminInfo>, max_supply: u64) -> Result<()> {
     ctx.accounts.admin_state.max_supply = max_supply;
+    msg!("Max supply updated to: {}", max_supply);
+    Ok(())
+}
+
+pub fn update_mint_start_date_handler(ctx: Context<UpdateAdminInfo>, mint_start_date: i64) -> Result<()> {
     ctx.accounts.admin_state.mint_start_date = mint_start_date;
+    msg!("Mint start date updated to: {}", mint_start_date);
+    Ok(())
+}
+
+pub fn update_dongle_price_nft_holder_handler(ctx: Context<UpdateAdminInfo>, dongle_price_nft_holder: u64) -> Result<()> {
     ctx.accounts.admin_state.dongle_price_nft_holder = dongle_price_nft_holder;
+    msg!("Dongle price for NFT holders updated to: {}", dongle_price_nft_holder);
+    Ok(())
+}
+
+pub fn update_dongle_price_normal_handler(ctx: Context<UpdateAdminInfo>, dongle_price_normal: u64) -> Result<()> {
     ctx.accounts.admin_state.dongle_price_normal = dongle_price_normal;
-    
-    // NOTE: payment_mint cannot be changed because the vault PDA is derived from it.
-    // NOTE: withdraw_wallet requires 3/5 multisig approval via update_withdraw_wallet.
-    // NOTE: vice_admins are set separately via set_vice_admins.
-    
-    msg!("Admin settings updated. Super admin: {}, mint_start_date: {}", ctx.accounts.new_super_admin.key(), mint_start_date);
-    msg!("Dongle prices - NFT holder: {}, Normal: {}", dongle_price_nft_holder, dongle_price_normal);
-    
+    msg!("Dongle price for normal users updated to: {}", dongle_price_normal);
+    Ok(())
+}
+
+pub fn update_purchase_started_handler(ctx: Context<UpdateAdminInfo>, purchase_started: bool) -> Result<()> {
+    ctx.accounts.admin_state.purchase_started = purchase_started;
+    msg!("Purchase started flag updated to: {}", purchase_started);
     Ok(())
 }

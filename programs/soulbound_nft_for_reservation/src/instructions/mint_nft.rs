@@ -338,8 +338,10 @@ pub fn handler(ctx: Context<MintNft>, name: String, symbol: String, uri: String)
         ctx.accounts.payment_mint.decimals,
     )?;
 
-    // store user's info - nft address
+    // store user's info - nft address and mint date
+    let clock = Clock::get()?;
     ctx.accounts.user_state.nft_address = ctx.accounts.mint.key();
+    ctx.accounts.user_state.nft_mint_date = clock.unix_timestamp;
 
     ctx.accounts.admin_state.current_reserved_count += 1; // increment reserved count
     msg!(

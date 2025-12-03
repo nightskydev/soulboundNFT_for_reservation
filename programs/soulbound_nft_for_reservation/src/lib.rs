@@ -36,16 +36,34 @@ pub mod soulbound_nft_for_reservation {
         instructions::set_vice_admins::handler(ctx, vice_admins)
     }
 
-    /// Update admin settings like mint_fee, max_supply, mint_start_date, and dongle prices (super_admin only)
-    pub fn update_admin_info(
-        ctx: Context<UpdateAdminInfo>, 
-        mint_fee: u64, 
-        max_supply: u64, 
-        mint_start_date: i64,
-        dongle_price_nft_holder: u64,
-        dongle_price_normal: u64,
-    ) -> Result<()> {
-        instructions::update_admin::handler(ctx, mint_fee, max_supply, mint_start_date, dongle_price_nft_holder, dongle_price_normal)
+    /// Update mint fee (super_admin only)
+    pub fn update_mint_fee(ctx: Context<UpdateAdminInfo>, mint_fee: u64) -> Result<()> {
+        instructions::update_admin::update_mint_fee_handler(ctx, mint_fee)
+    }
+
+    /// Update max supply (super_admin only)
+    pub fn update_max_supply(ctx: Context<UpdateAdminInfo>, max_supply: u64) -> Result<()> {
+        instructions::update_admin::update_max_supply_handler(ctx, max_supply)
+    }
+
+    /// Update mint start date (super_admin only)
+    pub fn update_mint_start_date(ctx: Context<UpdateAdminInfo>, mint_start_date: i64) -> Result<()> {
+        instructions::update_admin::update_mint_start_date_handler(ctx, mint_start_date)
+    }
+
+    /// Update dongle price for NFT holders (super_admin only)
+    pub fn update_dongle_price_nft_holder(ctx: Context<UpdateAdminInfo>, dongle_price_nft_holder: u64) -> Result<()> {
+        instructions::update_admin::update_dongle_price_nft_holder_handler(ctx, dongle_price_nft_holder)
+    }
+
+    /// Update dongle price for normal users (super_admin only)
+    pub fn update_dongle_price_normal(ctx: Context<UpdateAdminInfo>, dongle_price_normal: u64) -> Result<()> {
+        instructions::update_admin::update_dongle_price_normal_handler(ctx, dongle_price_normal)
+    }
+
+    /// Update purchase started flag (super_admin only)
+    pub fn update_purchase_started(ctx: Context<UpdateAdminInfo>, purchase_started: bool) -> Result<()> {
+        instructions::update_admin::update_purchase_started_handler(ctx, purchase_started)
     }
 
     /// Propose or approve withdraw wallet update (3 of 5 multisig required)

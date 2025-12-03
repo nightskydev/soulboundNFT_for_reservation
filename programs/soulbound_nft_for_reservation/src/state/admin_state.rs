@@ -19,6 +19,7 @@ pub struct AdminState {
     // Dongle pricing
     pub dongle_price_nft_holder: u64, // dongle price for soulbound NFT holders (e.g., 100 USDC)
     pub dongle_price_normal: u64, // dongle price for normal users without NFT (e.g., 499 USDC)
+    pub purchase_started: bool, // flag to enable/disable dongle purchases
 }
 
 impl AdminState {
@@ -38,7 +39,8 @@ impl AdminState {
         32 +        // pending_withdraw_wallet
         1 +         // approval_bitmap
         8 +         // dongle_price_nft_holder
-        8           // dongle_price_normal
+        8 +         // dongle_price_normal
+        1           // purchase_started
     }
 
     /// Check if a signer is part of the multisig (super_admin or vice_admin)

@@ -66,6 +66,7 @@ pub fn handler(
     ctx.accounts.admin_state.approval_bitmap = 0;
     ctx.accounts.admin_state.dongle_price_nft_holder = dongle_price_nft_holder;
     ctx.accounts.admin_state.dongle_price_normal = dongle_price_normal;
+    ctx.accounts.admin_state.purchase_started = false; // Disabled by default
 
     msg!("Admin initialized with vault at: {}, max_supply: {}, withdraw_wallet: {}, mint_start_date: {}", 
         ctx.accounts.vault.key(), max_supply, withdraw_wallet, mint_start_date);

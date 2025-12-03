@@ -1,5 +1,5 @@
 import * as anchor from "@coral-xyz/anchor";
-import { Keypair, SystemProgram } from "@solana/web3.js";
+import { Keypair } from "@solana/web3.js";
 import assert from "assert";
 import { ctx } from "./setup";
 
@@ -13,16 +13,9 @@ describe("update_admin", () => {
       const newMintFee = ctx.MINT_FEE * 2;
 
       const tx = await ctx.program.methods
-        .updateAdminInfo(
-          new anchor.BN(newMintFee),
-          new anchor.BN(ctx.MAX_SUPPLY),
-          new anchor.BN(0),
-          new anchor.BN(ctx.DONGLE_PRICE_NFT_HOLDER),
-          new anchor.BN(ctx.DONGLE_PRICE_NORMAL)
-        )
+        .updateMintFee(new anchor.BN(newMintFee))
         .accounts({
           superAdmin: ctx.superAdmin.publicKey,
-          newSuperAdmin: ctx.superAdmin.publicKey,
         })
         .rpc({ skipPreflight: true });
 
@@ -42,16 +35,9 @@ describe("update_admin", () => {
       const newMaxSupply = 200;
 
       const tx = await ctx.program.methods
-        .updateAdminInfo(
-          new anchor.BN(ctx.MINT_FEE * 2),
-          new anchor.BN(newMaxSupply),
-          new anchor.BN(0),
-          new anchor.BN(ctx.DONGLE_PRICE_NFT_HOLDER),
-          new anchor.BN(ctx.DONGLE_PRICE_NORMAL)
-        )
+        .updateMaxSupply(new anchor.BN(newMaxSupply))
         .accounts({
           superAdmin: ctx.superAdmin.publicKey,
-          newSuperAdmin: ctx.superAdmin.publicKey,
         })
         .rpc({ skipPreflight: true });
 
@@ -67,16 +53,9 @@ describe("update_admin", () => {
 
       // Restore original values
       await ctx.program.methods
-        .updateAdminInfo(
-          new anchor.BN(ctx.MINT_FEE * 2),
-          new anchor.BN(ctx.MAX_SUPPLY),
-          new anchor.BN(0),
-          new anchor.BN(ctx.DONGLE_PRICE_NFT_HOLDER),
-          new anchor.BN(ctx.DONGLE_PRICE_NORMAL)
-        )
+        .updateMaxSupply(new anchor.BN(ctx.MAX_SUPPLY))
         .accounts({
           superAdmin: ctx.superAdmin.publicKey,
-          newSuperAdmin: ctx.superAdmin.publicKey,
         })
         .rpc({ skipPreflight: true });
     });
@@ -85,16 +64,9 @@ describe("update_admin", () => {
       const futureTimestamp = Math.floor(Date.now() / 1000) + 3600;
 
       const tx = await ctx.program.methods
-        .updateAdminInfo(
-          new anchor.BN(ctx.MINT_FEE * 2),
-          new anchor.BN(ctx.MAX_SUPPLY),
-          new anchor.BN(futureTimestamp),
-          new anchor.BN(ctx.DONGLE_PRICE_NFT_HOLDER),
-          new anchor.BN(ctx.DONGLE_PRICE_NORMAL)
-        )
+        .updateMintStartDate(new anchor.BN(futureTimestamp))
         .accounts({
           superAdmin: ctx.superAdmin.publicKey,
-          newSuperAdmin: ctx.superAdmin.publicKey,
         })
         .rpc({ skipPreflight: true });
 
@@ -113,35 +85,20 @@ describe("update_admin", () => {
 
       // Reset to 0 for subsequent tests
       await ctx.program.methods
-        .updateAdminInfo(
-          new anchor.BN(ctx.MINT_FEE * 2),
-          new anchor.BN(ctx.MAX_SUPPLY),
-          new anchor.BN(0),
-          new anchor.BN(ctx.DONGLE_PRICE_NFT_HOLDER),
-          new anchor.BN(ctx.DONGLE_PRICE_NORMAL)
-        )
+        .updateMintStartDate(new anchor.BN(0))
         .accounts({
           superAdmin: ctx.superAdmin.publicKey,
-          newSuperAdmin: ctx.superAdmin.publicKey,
         })
         .rpc({ skipPreflight: true });
     });
 
-    it("should update dongle prices", async () => {
+    it("should update dongle price for NFT holders", async () => {
       const newDonglePriceNftHolder = 50_000_000; // 50 USDC
-      const newDonglePriceNormal = 250_000_000; // 250 USDC
 
       const tx = await ctx.program.methods
-        .updateAdminInfo(
-          new anchor.BN(ctx.MINT_FEE * 2),
-          new anchor.BN(ctx.MAX_SUPPLY),
-          new anchor.BN(0),
-          new anchor.BN(newDonglePriceNftHolder),
-          new anchor.BN(newDonglePriceNormal)
-        )
+        .updateDonglePriceNftHolder(new anchor.BN(newDonglePriceNftHolder))
         .accounts({
           superAdmin: ctx.superAdmin.publicKey,
-          newSuperAdmin: ctx.superAdmin.publicKey,
         })
         .rpc({ skipPreflight: true });
 
@@ -153,83 +110,80 @@ describe("update_admin", () => {
         newDonglePriceNftHolder,
         "Dongle price for NFT holder should be updated"
       );
+      console.log("✓ Dongle price for NFT holders updated to:", newDonglePriceNftHolder);
+
+      // Restore original value
+      await ctx.program.methods
+        .updateDonglePriceNftHolder(new anchor.BN(ctx.DONGLE_PRICE_NFT_HOLDER))
+        .accounts({
+          superAdmin: ctx.superAdmin.publicKey,
+        })
+        .rpc({ skipPreflight: true });
+    });
+
+    it("should update dongle price for normal users", async () => {
+      const newDonglePriceNormal = 250_000_000; // 250 USDC
+
+      const tx = await ctx.program.methods
+        .updateDonglePriceNormal(new anchor.BN(newDonglePriceNormal))
+        .accounts({
+          superAdmin: ctx.superAdmin.publicKey,
+        })
+        .rpc({ skipPreflight: true });
+
+      await ctx.provider.connection.confirmTransaction(tx, "confirmed");
+
+      const state = await ctx.fetchAdminState();
       assert.strictEqual(
         state.donglePriceNormal.toNumber(),
         newDonglePriceNormal,
         "Dongle price for normal user should be updated"
       );
-      console.log("✓ Dongle prices updated - NFT holder:", newDonglePriceNftHolder, ", Normal:", newDonglePriceNormal);
+      console.log("✓ Dongle price for normal users updated to:", newDonglePriceNormal);
 
-      // Restore original values
+      // Restore original value
       await ctx.program.methods
-        .updateAdminInfo(
-          new anchor.BN(ctx.MINT_FEE * 2),
-          new anchor.BN(ctx.MAX_SUPPLY),
-          new anchor.BN(0),
-          new anchor.BN(ctx.DONGLE_PRICE_NFT_HOLDER),
-          new anchor.BN(ctx.DONGLE_PRICE_NORMAL)
-        )
+        .updateDonglePriceNormal(new anchor.BN(ctx.DONGLE_PRICE_NORMAL))
         .accounts({
           superAdmin: ctx.superAdmin.publicKey,
-          newSuperAdmin: ctx.superAdmin.publicKey,
         })
         .rpc({ skipPreflight: true });
     });
 
-    it("should transfer super_admin to new address", async () => {
-      const newSuperAdmin = Keypair.generate();
-      const sig = await ctx.provider.connection.requestAirdrop(
-        newSuperAdmin.publicKey,
-        1e9
-      );
-      await ctx.provider.connection.confirmTransaction(sig, "confirmed");
-
-      // Transfer to new admin
-      await ctx.program.methods
-        .updateAdminInfo(
-          new anchor.BN(ctx.MINT_FEE * 2),
-          new anchor.BN(ctx.MAX_SUPPLY),
-          new anchor.BN(0),
-          new anchor.BN(ctx.DONGLE_PRICE_NFT_HOLDER),
-          new anchor.BN(ctx.DONGLE_PRICE_NORMAL)
-        )
+    it("should update purchase_started flag", async () => {
+      // Enable purchase
+      const tx = await ctx.program.methods
+        .updatePurchaseStarted(true)
         .accounts({
           superAdmin: ctx.superAdmin.publicKey,
-          newSuperAdmin: newSuperAdmin.publicKey,
         })
         .rpc({ skipPreflight: true });
 
+      await ctx.provider.connection.confirmTransaction(tx, "confirmed");
+
       let state = await ctx.fetchAdminState();
       assert.strictEqual(
-        state.superAdmin.toBase58(),
-        newSuperAdmin.publicKey.toBase58(),
-        "Super admin should be transferred"
+        state.purchaseStarted,
+        true,
+        "Purchase started should be true"
       );
-      console.log("✓ Super admin transferred to:", newSuperAdmin.publicKey.toBase58());
+      console.log("✓ Purchase started set to true");
 
-      // Transfer back to original
+      // Disable purchase
       await ctx.program.methods
-        .updateAdminInfo(
-          new anchor.BN(ctx.MINT_FEE * 2),
-          new anchor.BN(ctx.MAX_SUPPLY),
-          new anchor.BN(0),
-          new anchor.BN(ctx.DONGLE_PRICE_NFT_HOLDER),
-          new anchor.BN(ctx.DONGLE_PRICE_NORMAL)
-        )
+        .updatePurchaseStarted(false)
         .accounts({
-          superAdmin: newSuperAdmin.publicKey,
-          newSuperAdmin: ctx.superAdmin.publicKey,
+          superAdmin: ctx.superAdmin.publicKey,
         })
-        .signers([newSuperAdmin])
         .rpc({ skipPreflight: true });
 
       state = await ctx.fetchAdminState();
       assert.strictEqual(
-        state.superAdmin.toBase58(),
-        ctx.superAdmin.publicKey.toBase58(),
-        "Super admin should be restored"
+        state.purchaseStarted,
+        false,
+        "Purchase started should be false"
       );
-      console.log("✓ Super admin restored");
+      console.log("✓ Purchase started set to false");
     });
   });
 
@@ -245,16 +199,9 @@ describe("update_admin", () => {
       let errorThrown = false;
       try {
         await ctx.program.methods
-          .updateAdminInfo(
-            new anchor.BN(ctx.MINT_FEE),
-            new anchor.BN(ctx.MAX_SUPPLY),
-            new anchor.BN(0),
-            new anchor.BN(ctx.DONGLE_PRICE_NFT_HOLDER),
-            new anchor.BN(ctx.DONGLE_PRICE_NORMAL)
-          )
+          .updateMintFee(new anchor.BN(ctx.MINT_FEE))
           .accounts({
             superAdmin: randomUser.publicKey,
-            newSuperAdmin: randomUser.publicKey,
           })
           .signers([randomUser])
           .rpc({ skipPreflight: true });
@@ -264,33 +211,6 @@ describe("update_admin", () => {
       }
 
       assert.ok(errorThrown, "Should have rejected unauthorized update");
-    });
-
-    it("should fail when new_super_admin is system program (InvalidAdminAccount)", async () => {
-      let errorThrown = false;
-      try {
-        await ctx.program.methods
-          .updateAdminInfo(
-            new anchor.BN(ctx.MINT_FEE),
-            new anchor.BN(ctx.MAX_SUPPLY),
-            new anchor.BN(0),
-            new anchor.BN(ctx.DONGLE_PRICE_NFT_HOLDER),
-            new anchor.BN(ctx.DONGLE_PRICE_NORMAL)
-          )
-          .accounts({
-            superAdmin: ctx.superAdmin.publicKey,
-            newSuperAdmin: SystemProgram.programId, // System program - invalid!
-          })
-          .rpc({ skipPreflight: true });
-      } catch (err: any) {
-        errorThrown = true;
-        console.log("✓ Correctly rejected system program as new super admin");
-      }
-
-      assert.ok(
-        errorThrown,
-        "Should have rejected system program as new super admin"
-      );
     });
   });
 });

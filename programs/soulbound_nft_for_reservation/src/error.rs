@@ -44,4 +44,6 @@ pub enum ProgramErrorCode {
     DuplicateViceAdmin,
     #[msg("Minting has not started yet")]
     MintNotStarted,
+    #[msg("Dongle purchase has not started yet")]
+    PurchaseNotStarted,
 }

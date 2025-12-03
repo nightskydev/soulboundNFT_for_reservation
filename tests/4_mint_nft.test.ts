@@ -21,16 +21,9 @@ describe("mint_nft", () => {
       const futureTimestamp = Math.floor(Date.now() / 1000) + 3600;
 
       await ctx.program.methods
-        .updateAdminInfo(
-          new anchor.BN(ctx.MINT_FEE * 2),
-          new anchor.BN(ctx.MAX_SUPPLY),
-          new anchor.BN(futureTimestamp),
-          new anchor.BN(ctx.DONGLE_PRICE_NFT_HOLDER),
-          new anchor.BN(ctx.DONGLE_PRICE_NORMAL)
-        )
+        .updateMintStartDate(new anchor.BN(futureTimestamp))
         .accounts({
           superAdmin: ctx.superAdmin.publicKey,
-          newSuperAdmin: ctx.superAdmin.publicKey,
         })
         .rpc({ skipPreflight: true });
 
@@ -68,16 +61,9 @@ describe("mint_nft", () => {
       } finally {
         // ALWAYS reset mint_start_date to 0 for subsequent tests
         await ctx.program.methods
-          .updateAdminInfo(
-            new anchor.BN(ctx.MINT_FEE * 2),
-            new anchor.BN(ctx.MAX_SUPPLY),
-            new anchor.BN(0),
-            new anchor.BN(ctx.DONGLE_PRICE_NFT_HOLDER),
-            new anchor.BN(ctx.DONGLE_PRICE_NORMAL)
-          )
+          .updateMintStartDate(new anchor.BN(0))
           .accounts({
             superAdmin: ctx.superAdmin.publicKey,
-            newSuperAdmin: ctx.superAdmin.publicKey,
           })
           .rpc({ skipPreflight: true });
       }
@@ -198,6 +184,15 @@ describe("mint_nft", () => {
         "User state should store NFT address"
       );
       console.log("User NFT address:", userState.nftAddress.toBase58());
+
+      // Verify NFT mint date is set
+      const mintDate = userState.nftMintDate.toNumber();
+      const now = Math.floor(Date.now() / 1000);
+      assert.ok(
+        mintDate > 0 && mintDate <= now + 60, // within 60 seconds tolerance
+        "NFT mint date should be set to a recent timestamp"
+      );
+      console.log("NFT mint date:", new Date(mintDate * 1000).toISOString());
     });
   });
 
@@ -237,16 +232,9 @@ describe("mint_nft", () => {
     it("should fail when max supply is reached (MaxSupplyReached)", async () => {
       // Set max supply to current count (1)
       await ctx.program.methods
-        .updateAdminInfo(
-          new anchor.BN(ctx.MINT_FEE * 2),
-          new anchor.BN(1), // Set max supply to 1 (already minted 1)
-          new anchor.BN(0),
-          new anchor.BN(ctx.DONGLE_PRICE_NFT_HOLDER),
-          new anchor.BN(ctx.DONGLE_PRICE_NORMAL)
-        )
+        .updateMaxSupply(new anchor.BN(1)) // Set max supply to 1 (already minted 1)
         .accounts({
           superAdmin: ctx.superAdmin.publicKey,
-          newSuperAdmin: ctx.superAdmin.publicKey,
         })
         .rpc({ skipPreflight: true });
 
@@ -279,16 +267,9 @@ describe("mint_nft", () => {
       } finally {
         // ALWAYS restore max supply, even if assertion fails
         await ctx.program.methods
-          .updateAdminInfo(
-            new anchor.BN(ctx.MINT_FEE * 2),
-            new anchor.BN(ctx.MAX_SUPPLY),
-            new anchor.BN(0),
-            new anchor.BN(ctx.DONGLE_PRICE_NFT_HOLDER),
-            new anchor.BN(ctx.DONGLE_PRICE_NORMAL)
-          )
+          .updateMaxSupply(new anchor.BN(ctx.MAX_SUPPLY))
           .accounts({
             superAdmin: ctx.superAdmin.publicKey,
-            newSuperAdmin: ctx.superAdmin.publicKey,
           })
           .rpc({ skipPreflight: true });
       }

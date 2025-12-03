@@ -55,6 +55,12 @@ pub struct PurchaseDongle<'info> {
 pub fn handler(ctx: Context<PurchaseDongle>) -> Result<()> {
     msg!("Processing dongle purchase");
 
+    // Check if purchase is enabled
+    require!(
+        ctx.accounts.admin_state.purchase_started,
+        ProgramErrorCode::PurchaseNotStarted
+    );
+
     // Determine price based on whether user has a soulbound NFT
     let is_nft_holder = ctx.accounts.user_state.nft_address != Pubkey::default();
     

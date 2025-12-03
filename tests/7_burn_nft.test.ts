@@ -227,6 +227,15 @@ describe("burn_nft", () => {
         "User should have new NFT"
       );
 
+      // Verify NFT mint date is updated
+      const mintDate = userState.nftMintDate.toNumber();
+      const now = Math.floor(Date.now() / 1000);
+      assert.ok(
+        mintDate > 0 && mintDate <= now + 60,
+        "NFT mint date should be set to a recent timestamp"
+      );
+      console.log("New NFT mint date:", new Date(mintDate * 1000).toISOString());
+
       console.log("✓ Successfully minted new NFT after burning previous one");
     });
   });

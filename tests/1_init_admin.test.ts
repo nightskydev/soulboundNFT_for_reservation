@@ -38,6 +38,7 @@ describe("init_admin", () => {
       console.log("Payment mint:", state.paymentMint.toBase58());
       console.log("Dongle price (NFT holder):", state.donglePriceNftHolder.toString());
       console.log("Dongle price (Normal):", state.donglePriceNormal.toString());
+      console.log("Purchase started:", state.purchaseStarted);
 
       assert.strictEqual(
         state.superAdmin.toBase58(),
@@ -83,6 +84,11 @@ describe("init_admin", () => {
         state.donglePriceNormal.toNumber(),
         ctx.DONGLE_PRICE_NORMAL,
         "Dongle price for normal user should match"
+      );
+      assert.strictEqual(
+        state.purchaseStarted,
+        false,
+        "Purchase started should be false by default"
       );
     });
   });

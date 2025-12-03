@@ -16,6 +16,16 @@ describe("purchase_dongle", () => {
   let normalUser: Keypair;
   let normalUserTokenAccount: PublicKey;
 
+  // Helper function to enable/disable purchase
+  async function setPurchaseStarted(enabled: boolean) {
+    await ctx.program.methods
+      .updatePurchaseStarted(enabled)
+      .accounts({
+        superAdmin: ctx.superAdmin.publicKey,
+      })
+      .rpc({ skipPreflight: true });
+  }
+
   before(async () => {
     await ctx.initialize();
 
@@ -99,8 +109,72 @@ describe("purchase_dongle", () => {
     });
   });
 
+  describe("Purchase Not Started", () => {
+    it("should fail when purchase_started is false (PurchaseNotStarted)", async () => {
+      // Ensure purchase is disabled
+      await setPurchaseStarted(false);
+
+      // User needs NFT to have user_state
+      let userHasNft = false;
+      try {
+        const userState = await ctx.fetchUserState(ctx.user.publicKey);
+        userHasNft =
+          userState.nftAddress.toBase58() !== PublicKey.default.toBase58();
+      } catch (e) {
+        // User state doesn't exist
+      }
+
+      if (!userHasNft) {
+        // Mint NFT for user
+        const mint = Keypair.generate();
+        const tokenAccount = getAssociatedTokenAddressSync(
+          mint.publicKey,
+          ctx.user.publicKey,
+          false,
+          TOKEN_2022_PROGRAM_ID,
+          ASSOCIATED_TOKEN_PROGRAM_ID
+        );
+
+        await ctx.program.methods
+          .mintNft("Test NFT", "TEST", "https://example.com/nft")
+          .accounts({
+            signer: ctx.user.publicKey,
+            tokenAccount: tokenAccount,
+            mint: mint.publicKey,
+            paymentMint: ctx.paymentMint,
+            payerTokenAccount: ctx.userTokenAccount,
+            paymentTokenProgram: TOKEN_PROGRAM_ID,
+          })
+          .signers([mint, ctx.user])
+          .rpc({ skipPreflight: true });
+      }
+
+      let errorThrown = false;
+      try {
+        await ctx.program.methods
+          .purchaseDongle()
+          .accounts({
+            buyer: ctx.user.publicKey,
+            paymentMint: ctx.paymentMint,
+            buyerTokenAccount: ctx.userTokenAccount,
+            paymentTokenProgram: TOKEN_PROGRAM_ID,
+          })
+          .signers([ctx.user])
+          .rpc({ skipPreflight: true });
+      } catch (err: any) {
+        errorThrown = true;
+        console.log("✓ Correctly rejected purchase when purchase_started is false");
+      }
+
+      assert.ok(errorThrown, "Should have rejected purchase when not started");
+    });
+  });
+
   describe("NFT Holder - Discounted Price", () => {
     it("should successfully purchase dongle at discounted price for NFT holder", async () => {
+      // Enable purchase
+      await setPurchaseStarted(true);
+
       // User (ctx.user) should have an NFT from previous tests
       // Let's check and mint one if needed
       let userHasNft = false;
