@@ -13,7 +13,7 @@ pub struct PurchaseDongle<'info> {
         seeds = [b"admin_state".as_ref()],
         bump,
     )]
-    pub admin_state: Account<'info, AdminState>,
+    pub admin_state: Box<Account<'info, AdminState>>,
 
     /// User state to check if buyer has an NFT
     #[account(

@@ -20,6 +20,10 @@ pub struct AdminState {
     pub dongle_price_nft_holder: u64, // dongle price for soulbound NFT holders (e.g., 100 USDC)
     pub dongle_price_normal: u64, // dongle price for normal users without NFT (e.g., 499 USDC)
     pub purchase_started: bool, // flag to enable/disable dongle purchases
+    
+    // Multisig fields for admin wallet update (super_admin + vice_admins)
+    pub pending_admin_wallets: [Pubkey; 5], // proposed new admin wallets [0]=super_admin, [1-4]=vice_admins
+    pub admin_approval_bitmap: u8, // approvals for admin wallet proposal
 }
 
 impl AdminState {
@@ -40,7 +44,9 @@ impl AdminState {
         1 +         // approval_bitmap
         8 +         // dongle_price_nft_holder
         8 +         // dongle_price_normal
-        1           // purchase_started
+        1 +         // purchase_started
+        (32 * 5) +  // pending_admin_wallets [5 pubkeys]
+        1           // admin_approval_bitmap
     }
 
     /// Check if a signer is part of the multisig (super_admin or vice_admin)
@@ -56,24 +62,69 @@ impl AdminState {
         None
     }
 
-    /// Check if signer has already approved
+    // ========== Withdraw Wallet Proposal Methods ==========
+    
+    /// Check if signer has already approved withdraw wallet proposal
     pub fn has_approved(&self, signer_index: u8) -> bool {
         (self.approval_bitmap >> signer_index) & 1 == 1
     }
 
-    /// Add approval from signer
+    /// Add approval for withdraw wallet proposal
     pub fn add_approval(&mut self, signer_index: u8) {
         self.approval_bitmap |= 1 << signer_index;
     }
 
-    /// Count total approvals
+    /// Count total approvals for withdraw wallet proposal
     pub fn approval_count(&self) -> u8 {
         self.approval_bitmap.count_ones() as u8
     }
 
-    /// Reset pending proposal
+    /// Reset pending withdraw wallet proposal
     pub fn reset_proposal(&mut self) {
         self.pending_withdraw_wallet = Pubkey::default();
         self.approval_bitmap = 0;
+    }
+
+    // ========== Admin Wallet Proposal Methods ==========
+    
+    /// Check if signer has already approved admin wallet proposal
+    pub fn has_admin_approved(&self, signer_index: u8) -> bool {
+        (self.admin_approval_bitmap >> signer_index) & 1 == 1
+    }
+
+    /// Add approval for admin wallet proposal
+    pub fn add_admin_approval(&mut self, signer_index: u8) {
+        self.admin_approval_bitmap |= 1 << signer_index;
+    }
+
+    /// Count total approvals for admin wallet proposal
+    pub fn admin_approval_count(&self) -> u8 {
+        self.admin_approval_bitmap.count_ones() as u8
+    }
+
+    /// Check if there's a pending admin wallet proposal
+    pub fn has_pending_admin_proposal(&self) -> bool {
+        // Check if any of the pending admin wallets is non-default
+        self.pending_admin_wallets.iter().any(|p| *p != Pubkey::default())
+    }
+
+    /// Reset pending admin wallet proposal
+    pub fn reset_admin_proposal(&mut self) {
+        self.pending_admin_wallets = [Pubkey::default(); 5];
+        self.admin_approval_bitmap = 0;
+    }
+
+    /// Apply approved admin wallets
+    pub fn apply_admin_wallets(&mut self) {
+        self.super_admin = self.pending_admin_wallets[0];
+        self.vice_admins = [
+            self.pending_admin_wallets[1],
+            self.pending_admin_wallets[2],
+            self.pending_admin_wallets[3],
+            self.pending_admin_wallets[4],
+        ];
+        self.reset_admin_proposal();
+        // Also reset any pending withdraw wallet proposal since admins changed
+        self.reset_proposal();
     }
 }

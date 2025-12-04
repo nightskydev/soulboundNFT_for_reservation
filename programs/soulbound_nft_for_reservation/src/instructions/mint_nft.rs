@@ -34,7 +34,7 @@ pub struct MintNft<'info> {
         seeds = [b"admin_state".as_ref()],
         bump,
     )]
-    pub admin_state: Account<'info, AdminState>,
+    pub admin_state: Box<Account<'info, AdminState>>,
     #[account(
         init_if_needed,
         seeds = [b"user_state".as_ref(), signer.key().as_ref()],

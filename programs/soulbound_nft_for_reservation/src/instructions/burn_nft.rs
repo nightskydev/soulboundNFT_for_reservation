@@ -28,7 +28,7 @@ pub struct BurnNft<'info> {
         seeds = [b"admin_state".as_ref()],
         bump,
     )]
-    pub admin_state: Account<'info, AdminState >,
+    pub admin_state: Box<Account<'info, AdminState>>,
     #[account(
         mut,
         seeds = [b"user_state".as_ref(), signer.key().as_ref()],

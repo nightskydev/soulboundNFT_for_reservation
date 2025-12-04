@@ -18,7 +18,7 @@ pub struct Withdraw<'info> {
         bump,
         constraint = admin_state.super_admin == super_admin.key() @ ProgramErrorCode::Unauthorized
     )]
-    pub admin_state: Account<'info, AdminState>,
+    pub admin_state: Box<Account<'info, AdminState>>,
 
     /// The SPL token mint for payment (e.g., USDC) - must match admin_state.payment_mint
     #[account(

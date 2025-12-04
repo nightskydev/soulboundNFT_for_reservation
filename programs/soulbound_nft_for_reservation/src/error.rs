@@ -46,4 +46,6 @@ pub enum ProgramErrorCode {
     MintNotStarted,
     #[msg("Dongle purchase has not started yet")]
     PurchaseNotStarted,
+    #[msg("Super admin address cannot be empty")]
+    InvalidSuperAdmin,
 }
