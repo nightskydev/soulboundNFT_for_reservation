@@ -56,6 +56,12 @@ pub fn handler(
     vice_admins: [Pubkey; 4],
 ) -> Result<()> {
     let super_admin_key = *ctx.accounts.super_admin.key;
+
+    // Validate that withdraw_wallet is not empty
+    require!(
+        withdraw_wallet != Pubkey::default(),
+        ProgramErrorCode::InvalidWithdrawWallet
+    );
     
     // Validate that vice_admins don't include super_admin
     for vice_admin in vice_admins.iter() {

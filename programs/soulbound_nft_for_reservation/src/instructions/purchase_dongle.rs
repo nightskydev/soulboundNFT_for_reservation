@@ -15,12 +15,15 @@ pub struct PurchaseDongle<'info> {
     )]
     pub admin_state: Box<Account<'info, AdminState>>,
 
-    /// User state to check if buyer has an NFT
+    /// User state to check if buyer has an NFT (created if not exists)
     #[account(
+        init_if_needed,
         seeds = [b"user_state".as_ref(), buyer.key().as_ref()],
         bump,
+        payer = buyer,
+        space = UserState::space()
     )]
-    pub user_state: Account<'info, UserState>,
+    pub user_state: Box<Account<'info, UserState>>,
 
     // === Payment token accounts ===
     /// The SPL token mint for payment (e.g., USDC) - must match admin_state.payment_mint
@@ -50,6 +53,8 @@ pub struct PurchaseDongle<'info> {
 
     /// Token program for payment (can be Token or Token2022)
     pub payment_token_program: Interface<'info, TokenInterface>,
+
+    pub system_program: Program<'info, System>,
 }
 
 pub fn handler(ctx: Context<PurchaseDongle>) -> Result<()> {
@@ -93,4 +98,3 @@ pub fn handler(ctx: Context<PurchaseDongle>) -> Result<()> {
 
     Ok(())
 }
-

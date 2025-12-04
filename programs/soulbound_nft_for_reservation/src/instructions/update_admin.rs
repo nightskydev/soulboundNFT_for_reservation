@@ -24,6 +24,12 @@ pub fn update_mint_fee_handler(ctx: Context<UpdateAdminInfo>, mint_fee: u64) -> 
 }
 
 pub fn update_max_supply_handler(ctx: Context<UpdateAdminInfo>, max_supply: u64) -> Result<()> {
+    // Validate max_supply is not below current reserved count (0 means unlimited)
+    require!(
+        max_supply == 0 || max_supply >= ctx.accounts.admin_state.current_reserved_count,
+        ProgramErrorCode::InvalidMaxSupply
+    );
+    
     ctx.accounts.admin_state.max_supply = max_supply;
     msg!("Max supply updated to: {}", max_supply);
     Ok(())

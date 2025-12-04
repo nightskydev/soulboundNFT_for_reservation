@@ -48,4 +48,6 @@ pub enum ProgramErrorCode {
     PurchaseNotStarted,
     #[msg("Super admin address cannot be empty")]
     InvalidSuperAdmin,
+    #[msg("Max supply cannot be less than current reserved count")]
+    InvalidMaxSupply,
 }

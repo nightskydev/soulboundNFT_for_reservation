@@ -22,6 +22,12 @@ pub fn handler(ctx: Context<UpdateWithdrawWallet>, new_withdraw_wallet: Pubkey) 
     let admin_state = &mut ctx.accounts.admin_state;
     let signer = ctx.accounts.signer.key();
 
+    // Validate that new_withdraw_wallet is not empty
+    require!(
+        new_withdraw_wallet != Pubkey::default(),
+        ProgramErrorCode::InvalidWithdrawWallet
+    );
+
     // Verify signer is part of the multisig (super_admin or vice_admin)
     let signer_index = admin_state.get_signer_index(&signer)
         .ok_or(ProgramErrorCode::NotMultisigMember)?;
