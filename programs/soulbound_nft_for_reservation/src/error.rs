@@ -50,4 +50,6 @@ pub enum ProgramErrorCode {
     InvalidSuperAdmin,
     #[msg("Max supply cannot be less than current reserved count")]
     InvalidMaxSupply,
+    #[msg("User has already purchased a dongle")]
+    AlreadyPurchased,
 }

@@ -66,6 +66,12 @@ pub fn handler(ctx: Context<PurchaseDongle>) -> Result<()> {
         ProgramErrorCode::PurchaseNotStarted
     );
 
+    // Check if user has already purchased a dongle
+    require!(
+        ctx.accounts.user_state.purchased_date == 0,
+        ProgramErrorCode::AlreadyPurchased
+    );
+
     // Determine price based on whether user has a soulbound NFT
     let is_nft_holder = ctx.accounts.user_state.nft_address != Pubkey::default();
     
@@ -93,6 +99,10 @@ pub fn handler(ctx: Context<PurchaseDongle>) -> Result<()> {
         price,
         ctx.accounts.payment_mint.decimals,
     )?;
+
+    // Store the purchased date
+    let clock = Clock::get()?;
+    ctx.accounts.user_state.purchased_date = clock.unix_timestamp;
 
     msg!("Dongle purchase completed - {} tokens transferred to vault", price);
 

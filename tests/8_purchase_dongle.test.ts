@@ -302,6 +302,16 @@ describe("purchase_dongle", () => {
         "User should pay NFT holder dongle price"
       );
 
+      // Verify purchased_date is set
+      const userStateAfterPurchase = await ctx.fetchUserState(ctx.user.publicKey);
+      const purchasedDate = userStateAfterPurchase.purchasedDate.toNumber();
+      const now = Math.floor(Date.now() / 1000);
+      assert.ok(
+        purchasedDate > 0 && purchasedDate <= now && purchasedDate >= now - 60,
+        "Purchased date should be set to current timestamp"
+      );
+      console.log("✓ Purchased date set:", new Date(purchasedDate * 1000).toISOString());
+
       console.log(
         "✓ NFT holder paid discounted price:",
         ctx.DONGLE_PRICE_NFT_HOLDER / 10 ** ctx.PAYMENT_DECIMALS,
@@ -316,48 +326,50 @@ describe("purchase_dongle", () => {
   });
 
   describe("Normal User (With user_state but no NFT) - Full Price", () => {
+    // Fresh user for this test (no NFT, no previous purchase)
+    let freshNormalUser: Keypair;
+    let freshNormalUserTokenAccount: PublicKey;
+
     it("should successfully purchase dongle at full price for user without NFT", async () => {
-      // Burn the user's NFT to test normal price path
-      // First, get the user's NFT info
-      const userState = await ctx.fetchUserState(ctx.user.publicKey);
-      const userNftMint = userState.nftAddress;
+      // Create a fresh user without NFT for testing normal price
+      freshNormalUser = Keypair.generate();
 
-      if (userNftMint.toBase58() !== PublicKey.default.toBase58()) {
-        const userNftTokenAccount = getAssociatedTokenAddressSync(
-          userNftMint,
-          ctx.user.publicKey,
-          false,
-          TOKEN_2022_PROGRAM_ID,
-          ASSOCIATED_TOKEN_PROGRAM_ID
-        );
-
-        // Burn the NFT
-        await ctx.program.methods
-          .burnNft()
-          .accounts({
-            signer: ctx.user.publicKey,
-            oldTokenAccount: userNftTokenAccount,
-            oldMint: userNftMint,
-          })
-          .signers([ctx.user])
-          .rpc({ skipPreflight: true });
-
-        console.log("Burned user's NFT to test normal price");
-      }
-
-      // Verify user no longer has NFT
-      const userStateAfterBurn = await ctx.fetchUserState(ctx.user.publicKey);
-      assert.strictEqual(
-        userStateAfterBurn.nftAddress.toBase58(),
-        PublicKey.default.toBase58(),
-        "User should not have an NFT"
+      // Airdrop SOL
+      const sig = await ctx.provider.connection.requestAirdrop(
+        freshNormalUser.publicKey,
+        2e9
       );
+      await ctx.provider.connection.confirmTransaction(sig, "confirmed");
+
+      // Create token account and mint USDC
+      freshNormalUserTokenAccount = await createAssociatedTokenAccount(
+        ctx.provider.connection,
+        ctx.superAdmin.payer,
+        ctx.paymentMint,
+        freshNormalUser.publicKey,
+        undefined,
+        TOKEN_PROGRAM_ID
+      );
+
+      await mintTo(
+        ctx.provider.connection,
+        ctx.superAdmin.payer,
+        ctx.paymentMint,
+        freshNormalUserTokenAccount,
+        ctx.superAdmin.publicKey,
+        ctx.DONGLE_PRICE_NORMAL * 2, // Enough for dongle purchase
+        [],
+        undefined,
+        TOKEN_PROGRAM_ID
+      );
+
+      console.log("Fresh normal user (no NFT):", freshNormalUser.publicKey.toBase58());
 
       // Get balances before
       const vaultBefore = await getAccount(ctx.provider.connection, ctx.vault);
       const userTokenBefore = await getAccount(
         ctx.provider.connection,
-        ctx.userTokenAccount
+        freshNormalUserTokenAccount
       );
 
       const vaultBalanceBefore = Number(vaultBefore.amount);
@@ -374,44 +386,17 @@ describe("purchase_dongle", () => {
         "USDC"
       );
 
-      // Mint more USDC to user if needed
-      if (userBalanceBefore < ctx.DONGLE_PRICE_NORMAL) {
-        await mintTo(
-          ctx.provider.connection,
-          ctx.superAdmin.payer,
-          ctx.paymentMint,
-          ctx.userTokenAccount,
-          ctx.superAdmin.publicKey,
-          ctx.DONGLE_PRICE_NORMAL,
-          [],
-          undefined,
-          TOKEN_PROGRAM_ID
-        );
-        console.log("Minted additional USDC for user");
-      }
-
-      // Get updated balance
-      const userTokenUpdated = await getAccount(
-        ctx.provider.connection,
-        ctx.userTokenAccount
-      );
-      const userBalanceUpdated = Number(userTokenUpdated.amount);
-      console.log(
-        "User balance (after top-up):",
-        userBalanceUpdated / 10 ** ctx.PAYMENT_DECIMALS,
-        "USDC"
-      );
-
       // Purchase dongle as normal user (without NFT)
+      // This will create user_state via init_if_needed
       const tx = await ctx.program.methods
         .purchaseDongle()
         .accounts({
-          buyer: ctx.user.publicKey,
+          buyer: freshNormalUser.publicKey,
           paymentMint: ctx.paymentMint,
-          buyerTokenAccount: ctx.userTokenAccount,
+          buyerTokenAccount: freshNormalUserTokenAccount,
           paymentTokenProgram: TOKEN_PROGRAM_ID,
         })
-        .signers([ctx.user])
+        .signers([freshNormalUser])
         .rpc({ skipPreflight: true });
 
       await ctx.provider.connection.confirmTransaction(tx, "confirmed");
@@ -421,7 +406,7 @@ describe("purchase_dongle", () => {
       const vaultAfter = await getAccount(ctx.provider.connection, ctx.vault);
       const userTokenAfter = await getAccount(
         ctx.provider.connection,
-        ctx.userTokenAccount
+        freshNormalUserTokenAccount
       );
 
       const vaultBalanceAfter = Number(vaultAfter.amount);
@@ -433,10 +418,29 @@ describe("purchase_dongle", () => {
         "Vault should receive normal dongle price"
       );
       assert.strictEqual(
-        userBalanceUpdated - userBalanceAfter,
+        userBalanceBefore - userBalanceAfter,
         ctx.DONGLE_PRICE_NORMAL,
         "User should pay normal dongle price"
       );
+
+      // Verify user_state was created and purchased_date is set
+      const userStateAfterPurchase = await ctx.fetchUserState(freshNormalUser.publicKey);
+      
+      // Verify user has no NFT (normal user)
+      assert.strictEqual(
+        userStateAfterPurchase.nftAddress.toBase58(),
+        PublicKey.default.toBase58(),
+        "Normal user should not have an NFT"
+      );
+
+      // Verify purchased_date is set
+      const purchasedDate = userStateAfterPurchase.purchasedDate.toNumber();
+      const now = Math.floor(Date.now() / 1000);
+      assert.ok(
+        purchasedDate > 0 && purchasedDate <= now && purchasedDate >= now - 60,
+        "Purchased date should be set to current timestamp"
+      );
+      console.log("✓ Purchased date set:", new Date(purchasedDate * 1000).toISOString());
 
       console.log(
         "✓ Normal user paid full price:",
@@ -452,6 +456,33 @@ describe("purchase_dongle", () => {
   });
 
   describe("Failure Cases", () => {
+    it("should fail when user has already purchased (AlreadyPurchased)", async () => {
+      // ctx.user already purchased in previous test, so trying again should fail
+      let errorThrown = false;
+      try {
+        await ctx.program.methods
+          .purchaseDongle()
+          .accounts({
+            buyer: ctx.user.publicKey,
+            paymentMint: ctx.paymentMint,
+            buyerTokenAccount: ctx.userTokenAccount,
+            paymentTokenProgram: TOKEN_PROGRAM_ID,
+          })
+          .signers([ctx.user])
+          .rpc({ skipPreflight: true });
+      } catch (err: any) {
+        errorThrown = true;
+        const errMsg = err.toString();
+        assert.ok(
+          errMsg.includes("AlreadyPurchased") || errMsg.includes("already purchased"),
+          "Error should be AlreadyPurchased"
+        );
+        console.log("✓ Correctly rejected duplicate purchase");
+      }
+
+      assert.ok(errorThrown, "Should have rejected duplicate purchase");
+    });
+
     it("should fail with invalid payment mint (InvalidPaymentMint)", async () => {
       // Try to get or create a token account for wrong mint
       let wrongUserTokenAccount: PublicKey;
