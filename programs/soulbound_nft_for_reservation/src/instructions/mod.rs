@@ -3,6 +3,7 @@ pub mod init_admin;
 pub mod mint_nft;
 pub mod purchase_dongle;
 pub mod update_admin;
+pub mod update_payment_mint;
 pub mod update_withdraw_wallet;
 pub mod withdraw;
 
@@ -11,5 +12,6 @@ pub use init_admin::*;
 pub use mint_nft::*;
 pub use purchase_dongle::*;
 pub use update_admin::*;
+pub use update_payment_mint::*;
 pub use update_withdraw_wallet::*;
 pub use withdraw::*;

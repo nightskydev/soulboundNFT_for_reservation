@@ -58,3 +58,20 @@ pub fn update_purchase_started_handler(ctx: Context<UpdateAdminInfo>, purchase_s
     msg!("Purchase started flag updated to: {}", purchase_started);
     Ok(())
 }
+
+pub fn update_super_admin_handler(ctx: Context<UpdateAdminInfo>, new_super_admin: Pubkey) -> Result<()> {
+    // Validate that new_super_admin is not empty
+    require!(
+        new_super_admin != Pubkey::default(),
+        ProgramErrorCode::InvalidSuperAdmin
+    );
+
+    let old_admin = ctx.accounts.admin_state.super_admin;
+    ctx.accounts.admin_state.super_admin = new_super_admin;
+
+    msg!("Super admin updated:");
+    msg!("  From: {}", old_admin);
+    msg!("  To: {}", new_super_admin);
+
+    Ok(())
+}

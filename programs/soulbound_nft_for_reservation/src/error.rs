@@ -38,4 +38,12 @@ pub enum ProgramErrorCode {
     InvalidMaxSupply,
     #[msg("User has already purchased a dongle")]
     AlreadyPurchased,
+    #[msg("Invalid super admin - cannot be empty")]
+    InvalidSuperAdmin,
+    #[msg("Reserved count overflow")]
+    ReservedCountOverflow,
+    #[msg("Vault must be empty before changing payment mint")]
+    VaultNotEmpty,
+    #[msg("New payment mint must be different from current")]
+    SamePaymentMint,
 }

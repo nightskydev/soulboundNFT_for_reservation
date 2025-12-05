@@ -66,6 +66,17 @@ pub mod soulbound_nft_for_reservation {
         instructions::update_withdraw_wallet::handler(ctx, new_withdraw_wallet)
     }
 
+    /// Update super admin - transfer admin control to a new address (super_admin only)
+    pub fn update_super_admin(ctx: Context<UpdateAdminInfo>, new_super_admin: Pubkey) -> Result<()> {
+        instructions::update_admin::update_super_admin_handler(ctx, new_super_admin)
+    }
+
+    /// Update payment mint - migrate to a new payment token (super_admin only)
+    /// NOTE: Old vault must be empty (withdraw all funds first)
+    pub fn update_payment_mint(ctx: Context<UpdatePaymentMint>) -> Result<()> {
+        instructions::update_payment_mint::handler(ctx)
+    }
+
     pub fn mint_nft(ctx: Context<MintNft>, name: String, symbol: String, uri: String) -> Result<()> {
         instructions::mint_nft::handler(ctx, name, symbol, uri)
     }

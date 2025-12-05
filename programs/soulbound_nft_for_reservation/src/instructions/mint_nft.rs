@@ -343,7 +343,10 @@ pub fn handler(ctx: Context<MintNft>, name: String, symbol: String, uri: String)
     ctx.accounts.user_state.nft_address = ctx.accounts.mint.key();
     ctx.accounts.user_state.nft_mint_date = clock.unix_timestamp;
 
-    ctx.accounts.admin_state.current_reserved_count += 1; // increment reserved count
+    ctx.accounts.admin_state.current_reserved_count = ctx.accounts.admin_state
+        .current_reserved_count
+        .checked_add(1)
+        .ok_or(ProgramErrorCode::ReservedCountOverflow)?;
     msg!(
         "Current reserved count: {}",
         ctx.accounts.admin_state.current_reserved_count
