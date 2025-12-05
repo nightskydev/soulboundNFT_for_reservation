@@ -28,26 +28,12 @@ pub enum ProgramErrorCode {
     InsufficientVaultBalance,
     #[msg("Max supply reached - no more NFTs can be minted")]
     MaxSupplyReached,
-    #[msg("Invalid withdraw wallet - token account owner must match admin_state.withdraw_wallet")]
+    #[msg("Invalid withdraw wallet - cannot be empty")]
     InvalidWithdrawWallet,
-    #[msg("Not a multisig member - must be super_admin or vice_admin")]
-    NotMultisigMember,
-    #[msg("Already approved this proposal")]
-    AlreadyApproved,
-    #[msg("A different proposal is pending - cancel it first")]
-    DifferentProposalPending,
-    #[msg("No proposal pending")]
-    NoProposalPending,
-    #[msg("Vice admin cannot be the same as super admin")]
-    InvalidViceAdmin,
-    #[msg("Duplicate vice admin addresses not allowed")]
-    DuplicateViceAdmin,
     #[msg("Minting has not started yet")]
     MintNotStarted,
     #[msg("Dongle purchase has not started yet")]
     PurchaseNotStarted,
-    #[msg("Super admin address cannot be empty")]
-    InvalidSuperAdmin,
     #[msg("Max supply cannot be less than current reserved count")]
     InvalidMaxSupply,
     #[msg("User has already purchased a dongle")]

@@ -53,7 +53,6 @@ pub fn handler(
     mint_start_date: i64,
     dongle_price_nft_holder: u64,
     dongle_price_normal: u64,
-    vice_admins: [Pubkey; 4],
 ) -> Result<()> {
     let super_admin_key = *ctx.accounts.super_admin.key;
 
@@ -62,56 +61,23 @@ pub fn handler(
         withdraw_wallet != Pubkey::default(),
         ProgramErrorCode::InvalidWithdrawWallet
     );
-    
-    // Validate that vice_admins don't include super_admin
-    for vice_admin in vice_admins.iter() {
-        if *vice_admin != Pubkey::default() {
-            require!(
-                *vice_admin != super_admin_key,
-                ProgramErrorCode::InvalidViceAdmin
-            );
-        }
-    }
-
-    // Validate no duplicates (except for default/empty pubkeys)
-    for i in 0..4 {
-        if vice_admins[i] != Pubkey::default() {
-            for j in (i + 1)..4 {
-                require!(
-                    vice_admins[i] != vice_admins[j],
-                    ProgramErrorCode::DuplicateViceAdmin
-                );
-            }
-        }
-    }
 
     ctx.accounts.admin_state.bump = ctx.bumps.admin_state;
     ctx.accounts.admin_state.super_admin = super_admin_key;
-    ctx.accounts.admin_state.vice_admins = vice_admins;
     ctx.accounts.admin_state.withdraw_wallet = withdraw_wallet;
     ctx.accounts.admin_state.mint_fee = mint_fee;
     ctx.accounts.admin_state.current_reserved_count = 0;
     ctx.accounts.admin_state.payment_mint = ctx.accounts.payment_mint.key();
     ctx.accounts.admin_state.max_supply = max_supply;
     ctx.accounts.admin_state.mint_start_date = mint_start_date;
-    ctx.accounts.admin_state.pending_withdraw_wallet = Pubkey::default();
-    ctx.accounts.admin_state.approval_bitmap = 0;
     ctx.accounts.admin_state.dongle_price_nft_holder = dongle_price_nft_holder;
     ctx.accounts.admin_state.dongle_price_normal = dongle_price_normal;
     ctx.accounts.admin_state.purchase_started = false; // Disabled by default
-    ctx.accounts.admin_state.pending_admin_wallets = [Pubkey::default(); 5];
-    ctx.accounts.admin_state.admin_approval_bitmap = 0;
 
     msg!("Admin initialized with vault at: {}, max_supply: {}, withdraw_wallet: {}, mint_start_date: {}", 
         ctx.accounts.vault.key(), max_supply, withdraw_wallet, mint_start_date);
     msg!("Dongle prices - NFT holder: {}, Normal: {}", dongle_price_nft_holder, dongle_price_normal);
     msg!("Super admin: {}", super_admin_key);
-    msg!("Vice admins:");
-    for (i, va) in vice_admins.iter().enumerate() {
-        if *va != Pubkey::default() {
-            msg!("  Vice admin {}: {}", i + 1, va);
-        }
-    }
 
     Ok(())
 }

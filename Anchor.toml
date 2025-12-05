@@ -5,7 +5,7 @@ resolution = true
 skip-lint = false
 
 [programs.localnet]
-soulbound_nft_for_reservation = "H1frppnuiTXeGNk34HmcRtuK3SDUokpGK3az76JjNzYe"
+soulbound_nft_for_reservation = "FY9yewUB1mQnURB7jZzog52LnUideQ35Apfc5WSVe1zD"
 
 [registry]
 url = "https://api.apr.dev"

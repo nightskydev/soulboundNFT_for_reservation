@@ -1,6 +1,5 @@
 import * as anchor from "@coral-xyz/anchor";
 import { TOKEN_PROGRAM_ID } from "@solana/spl-token";
-import { PublicKey } from "@solana/web3.js";
 import assert from "assert";
 import { ctx } from "./setup";
 
@@ -10,14 +9,7 @@ describe("init_admin", () => {
   });
 
   describe("Success Cases", () => {
-    it("should initialize admin state with super_admin and vice_admins", async () => {
-      const viceAdmins: [PublicKey, PublicKey, PublicKey, PublicKey] = [
-        ctx.viceAdmin1.publicKey,
-        ctx.viceAdmin2.publicKey,
-        ctx.viceAdmin3.publicKey,
-        ctx.viceAdmin4.publicKey,
-      ];
-
+    it("should initialize admin state with super_admin", async () => {
       const tx = await ctx.program.methods
         .initAdmin(
           new anchor.BN(ctx.MINT_FEE),
@@ -25,8 +17,7 @@ describe("init_admin", () => {
           ctx.withdrawWallet.publicKey,
           new anchor.BN(0), // mint_start_date: 0 = no restriction
           new anchor.BN(ctx.DONGLE_PRICE_NFT_HOLDER),
-          new anchor.BN(ctx.DONGLE_PRICE_NORMAL),
-          viceAdmins
+          new anchor.BN(ctx.DONGLE_PRICE_NORMAL)
         )
         .accounts({
           superAdmin: ctx.superAdmin.publicKey,
@@ -40,10 +31,6 @@ describe("init_admin", () => {
 
       const state = await ctx.fetchAdminState();
       console.log("Super admin:", state.superAdmin.toBase58());
-      console.log("Vice admins:");
-      state.viceAdmins.forEach((va, i) => {
-        console.log(`  ${i + 1}: ${va.toBase58()}`);
-      });
       console.log("Withdraw wallet:", state.withdrawWallet.toBase58());
       console.log("Mint fee:", state.mintFee.toString());
       console.log("Max supply:", state.maxSupply.toString());
@@ -58,16 +45,6 @@ describe("init_admin", () => {
         ctx.superAdmin.publicKey.toBase58(),
         "Super admin should match"
       );
-      
-      // Verify vice admins
-      for (let i = 0; i < 4; i++) {
-        assert.strictEqual(
-          state.viceAdmins[i].toBase58(),
-          viceAdmins[i].toBase58(),
-          `Vice admin ${i + 1} should match`
-        );
-      }
-      
       assert.strictEqual(
         state.withdrawWallet.toBase58(),
         ctx.withdrawWallet.publicKey.toBase58(),
@@ -118,13 +95,6 @@ describe("init_admin", () => {
 
   describe("Failure Cases", () => {
     it("should fail to initialize admin state twice (account already exists)", async () => {
-      const viceAdmins: [PublicKey, PublicKey, PublicKey, PublicKey] = [
-        ctx.viceAdmin1.publicKey,
-        ctx.viceAdmin2.publicKey,
-        ctx.viceAdmin3.publicKey,
-        ctx.viceAdmin4.publicKey,
-      ];
-
       let errorThrown = false;
       try {
         await ctx.program.methods
@@ -134,8 +104,7 @@ describe("init_admin", () => {
             ctx.withdrawWallet.publicKey,
             new anchor.BN(0),
             new anchor.BN(ctx.DONGLE_PRICE_NFT_HOLDER),
-            new anchor.BN(ctx.DONGLE_PRICE_NORMAL),
-            viceAdmins
+            new anchor.BN(ctx.DONGLE_PRICE_NORMAL)
           )
           .accounts({
             superAdmin: ctx.superAdmin.publicKey,

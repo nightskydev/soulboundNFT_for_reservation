@@ -12,13 +12,13 @@ pub use instructions::*;
 
 pub use crate::error::ProgramErrorCode;
 
-declare_id!("H1frppnuiTXeGNk34HmcRtuK3SDUokpGK3az76JjNzYe");
+declare_id!("FY9yewUB1mQnURB7jZzog52LnUideQ35Apfc5WSVe1zD");
 
 #[program]
 pub mod soulbound_nft_for_reservation {
     use super::*;
 
-    /// Initialize admin state with super_admin (signer) and vice_admins
+    /// Initialize admin state with super_admin (signer)
     pub fn init_admin(
         ctx: Context<InitAdmin>, 
         mint_fee: u64, 
@@ -27,20 +27,8 @@ pub mod soulbound_nft_for_reservation {
         mint_start_date: i64,
         dongle_price_nft_holder: u64,
         dongle_price_normal: u64,
-        vice_admins: [Pubkey; 4],
     ) -> Result<()> {
-        instructions::init_admin::handler(ctx, mint_fee, max_supply, withdraw_wallet, mint_start_date, dongle_price_nft_holder, dongle_price_normal, vice_admins)
-    }
-
-    /// Propose or approve admin wallet update (3 of 5 multisig required)
-    /// admin_wallets: [Pubkey; 5] where [0]=new_super_admin, [1-4]=new_vice_admins
-    pub fn set_admin_wallet(ctx: Context<SetAdminWallet>, admin_wallets: [Pubkey; 5]) -> Result<()> {
-        instructions::set_admin_wallet::handler(ctx, admin_wallets)
-    }
-
-    /// Cancel a pending admin wallet proposal (any multisig member)
-    pub fn cancel_admin_wallet_proposal(ctx: Context<CancelAdminWalletProposal>) -> Result<()> {
-        instructions::set_admin_wallet::cancel_handler(ctx)
+        instructions::init_admin::handler(ctx, mint_fee, max_supply, withdraw_wallet, mint_start_date, dongle_price_nft_holder, dongle_price_normal)
     }
 
     /// Update mint fee (super_admin only)
@@ -73,16 +61,9 @@ pub mod soulbound_nft_for_reservation {
         instructions::update_admin::update_purchase_started_handler(ctx, purchase_started)
     }
 
-    /// Propose or approve withdraw wallet update (3 of 5 multisig required)
-    /// - If no pending proposal: creates new proposal with first approval
-    /// - If same proposal pending: adds approval, updates if threshold reached
+    /// Update withdraw wallet (super_admin only)
     pub fn update_withdraw_wallet(ctx: Context<UpdateWithdrawWallet>, new_withdraw_wallet: Pubkey) -> Result<()> {
         instructions::update_withdraw_wallet::handler(ctx, new_withdraw_wallet)
-    }
-
-    /// Cancel a pending withdraw wallet proposal (any multisig member)
-    pub fn cancel_withdraw_wallet_proposal(ctx: Context<CancelWithdrawWalletProposal>) -> Result<()> {
-        instructions::update_withdraw_wallet::cancel_handler(ctx)
     }
 
     pub fn mint_nft(ctx: Context<MintNft>, name: String, symbol: String, uri: String) -> Result<()> {

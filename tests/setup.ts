@@ -23,10 +23,6 @@ export class TestContext {
 
   // Accounts
   superAdmin: anchor.Wallet;
-  viceAdmin1: Keypair;
-  viceAdmin2: Keypair;
-  viceAdmin3: Keypair;
-  viceAdmin4: Keypair;
   withdrawWallet: Keypair;
   newWithdrawWallet: Keypair;
   user: Keypair;
@@ -62,10 +58,6 @@ export class TestContext {
     this.superAdmin = this.provider.wallet as anchor.Wallet;
 
     // Create keypairs
-    this.viceAdmin1 = Keypair.generate();
-    this.viceAdmin2 = Keypair.generate();
-    this.viceAdmin3 = Keypair.generate();
-    this.viceAdmin4 = Keypair.generate();
     this.withdrawWallet = Keypair.generate();
     this.newWithdrawWallet = Keypair.generate();
     this.user = Keypair.generate();
@@ -138,14 +130,10 @@ export class TestContext {
       TOKEN_PROGRAM_ID
     );
 
-    // Airdrop SOL to user and vice admins
+    // Airdrop SOL to users
     const airdropTargets = [
       this.user,
       this.user2,
-      this.viceAdmin1,
-      this.viceAdmin2,
-      this.viceAdmin3,
-      this.viceAdmin4,
     ];
     for (const target of airdropTargets) {
       const sig = await this.provider.connection.requestAirdrop(
@@ -200,10 +188,6 @@ export class TestContext {
     );
 
     console.log("Super admin:", this.superAdmin.publicKey.toBase58());
-    console.log("Vice admin 1:", this.viceAdmin1.publicKey.toBase58());
-    console.log("Vice admin 2:", this.viceAdmin2.publicKey.toBase58());
-    console.log("Vice admin 3:", this.viceAdmin3.publicKey.toBase58());
-    console.log("Vice admin 4:", this.viceAdmin4.publicKey.toBase58());
     console.log("Withdraw wallet:", this.withdrawWallet.publicKey.toBase58());
     console.log("New withdraw wallet:", this.newWithdrawWallet.publicKey.toBase58());
     console.log("User:", this.user.publicKey.toBase58());
