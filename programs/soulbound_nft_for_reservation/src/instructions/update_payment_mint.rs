@@ -20,13 +20,26 @@ pub struct UpdatePaymentMint<'info> {
     )]
     pub admin_state: Box<Account<'info, AdminState>>,
 
+    /// Current payment mint stored in admin_state
+    #[account(
+        constraint = old_payment_mint.key() == admin_state.payment_mint @ ProgramErrorCode::InvalidPaymentMint,
+        mint::token_program = old_payment_token_program
+    )]
+    pub old_payment_mint: InterfaceAccount<'info, Mint>,
+
     /// The old vault - must be empty before changing payment mint
     #[account(
-        seeds = [b"vault", admin_state.payment_mint.as_ref()],
+        seeds = [b"vault", old_payment_mint.key().as_ref()],
         bump,
+        token::mint = old_payment_mint,
+        token::authority = admin_state,
+        token::token_program = old_payment_token_program,
         constraint = old_vault.amount == 0 @ ProgramErrorCode::VaultNotEmpty
     )]
     pub old_vault: InterfaceAccount<'info, TokenAccount>,
+
+    /// Token program for old payment mint (can be Token or Token2022)
+    pub old_payment_token_program: Interface<'info, TokenInterface>,
 
     /// The new SPL token mint for payment
     #[account(
@@ -54,7 +67,7 @@ pub struct UpdatePaymentMint<'info> {
 }
 
 pub fn handler(ctx: Context<UpdatePaymentMint>) -> Result<()> {
-    let old_mint = ctx.accounts.admin_state.payment_mint;
+    let old_mint = ctx.accounts.old_payment_mint.key();
     let new_mint = ctx.accounts.new_payment_mint.key();
 
     // Validate that new mint is different from old mint

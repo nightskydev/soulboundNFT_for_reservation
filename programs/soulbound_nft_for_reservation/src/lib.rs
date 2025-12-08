@@ -90,6 +90,11 @@ pub mod soulbound_nft_for_reservation {
         instructions::withdraw::handler(ctx, amount)
     }
 
+    /// Withdraw all payment tokens from the vault (super_admin only)
+    pub fn withdraw_all(ctx: Context<Withdraw>) -> Result<()> {
+        instructions::withdraw::withdraw_all_handler(ctx)
+    }
+
     /// Purchase a dongle - NFT holders pay discounted price, normal users pay full price
     pub fn purchase_dongle(ctx: Context<PurchaseDongle>) -> Result<()> {
         instructions::purchase_dongle::handler(ctx)

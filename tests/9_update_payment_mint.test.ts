@@ -84,7 +84,9 @@ describe("update_payment_mint", () => {
           .updatePaymentMint()
           .accounts({
             superAdmin: ctx.superAdmin.publicKey,
+            oldPaymentMint: ctx.paymentMint,
             oldVault: ctx.vault,
+            oldPaymentTokenProgram: TOKEN_PROGRAM_ID,
             newPaymentMint: newPaymentMint,
             newPaymentTokenProgram: TOKEN_PROGRAM_ID,
           })
@@ -119,7 +121,9 @@ describe("update_payment_mint", () => {
           .updatePaymentMint()
           .accounts({
             superAdmin: randomUser.publicKey,
+            oldPaymentMint: ctx.paymentMint,
             oldVault: ctx.vault,
+            oldPaymentTokenProgram: TOKEN_PROGRAM_ID,
             newPaymentMint: newPaymentMint,
             newPaymentTokenProgram: TOKEN_PROGRAM_ID,
           })
@@ -176,7 +180,9 @@ describe("update_payment_mint", () => {
         .updatePaymentMint()
         .accounts({
           superAdmin: ctx.superAdmin.publicKey,
+          oldPaymentMint: ctx.paymentMint,
           oldVault: ctx.vault,
+          oldPaymentTokenProgram: TOKEN_PROGRAM_ID,
           newPaymentMint: newPaymentMint,
           newPaymentTokenProgram: TOKEN_PROGRAM_ID,
         })
@@ -218,7 +224,9 @@ describe("update_payment_mint", () => {
           .updatePaymentMint()
           .accounts({
             superAdmin: ctx.superAdmin.publicKey,
+            oldPaymentMint: currentState.paymentMint,
             oldVault: currentVault,
+            oldPaymentTokenProgram: TOKEN_PROGRAM_ID,
             newPaymentMint: currentState.paymentMint, // Same mint!
             newPaymentTokenProgram: TOKEN_PROGRAM_ID,
           })
@@ -257,7 +265,9 @@ describe("update_payment_mint", () => {
         .updatePaymentMint()
         .accounts({
           superAdmin: ctx.superAdmin.publicKey,
+          oldPaymentMint: stateBefore.paymentMint,
           oldVault: currentVault,
+          oldPaymentTokenProgram: TOKEN_PROGRAM_ID,
           newPaymentMint: anotherPaymentMint,
           newPaymentTokenProgram: TOKEN_PROGRAM_ID,
         })
@@ -295,7 +305,9 @@ describe("update_payment_mint", () => {
         .updatePaymentMint()
         .accounts({
           superAdmin: ctx.superAdmin.publicKey,
+          oldPaymentMint: stateBefore.paymentMint,
           oldVault: currentVault,
+          oldPaymentTokenProgram: TOKEN_PROGRAM_ID,
           newPaymentMint: ctx.paymentMint,
           newPaymentTokenProgram: TOKEN_PROGRAM_ID,
         })

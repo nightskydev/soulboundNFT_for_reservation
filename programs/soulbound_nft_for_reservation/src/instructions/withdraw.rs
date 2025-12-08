@@ -92,3 +92,45 @@ pub fn handler(ctx: Context<Withdraw>, amount: u64) -> Result<()> {
     Ok(())
 }
 
+pub fn withdraw_all_handler(ctx: Context<Withdraw>) -> Result<()> {
+    let vault_balance = ctx.accounts.vault.amount;
+    
+    msg!("Withdrawing all {} tokens from vault to withdraw wallet: {}", 
+        vault_balance, ctx.accounts.admin_state.withdraw_wallet);
+
+    // Validate that vault has balance
+    require!(
+        vault_balance > 0,
+        ProgramErrorCode::InsufficientVaultBalance
+    );
+
+    // Create signer seeds for admin_state PDA
+    let seeds = b"admin_state";
+    let bump = ctx.bumps.admin_state;
+    let signer_seeds: &[&[&[u8]]] = &[&[seeds, &[bump]]];
+
+    // Transfer all tokens from vault to withdraw wallet's token account
+    transfer_checked(
+        CpiContext::new_with_signer(
+            ctx.accounts.token_program.to_account_info(),
+            TransferChecked {
+                from: ctx.accounts.vault.to_account_info(),
+                mint: ctx.accounts.payment_mint.to_account_info(),
+                to: ctx.accounts.withdraw_token_account.to_account_info(),
+                authority: ctx.accounts.admin_state.to_account_info(),
+            },
+            signer_seeds,
+        ),
+        vault_balance,
+        ctx.accounts.payment_mint.decimals,
+    )?;
+
+    msg!(
+        "Successfully withdrew all {} tokens to {}. Vault balance is now 0.",
+        vault_balance,
+        ctx.accounts.admin_state.withdraw_wallet
+    );
+
+    Ok(())
+}
+
