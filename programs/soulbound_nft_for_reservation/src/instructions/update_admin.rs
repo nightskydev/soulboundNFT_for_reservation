@@ -18,6 +18,7 @@ pub struct UpdateAdminInfo<'info> {
 }
 
 pub fn update_mint_fee_handler(ctx: Context<UpdateAdminInfo>, mint_fee: u64) -> Result<()> {
+    require!(mint_fee > 0, ProgramErrorCode::InvalidMintFee);
     ctx.accounts.admin_state.mint_fee = mint_fee;
     msg!("Mint fee updated to: {}", mint_fee);
     Ok(())
@@ -42,12 +43,14 @@ pub fn update_mint_start_date_handler(ctx: Context<UpdateAdminInfo>, mint_start_
 }
 
 pub fn update_dongle_price_nft_holder_handler(ctx: Context<UpdateAdminInfo>, dongle_price_nft_holder: u64) -> Result<()> {
+    require!(dongle_price_nft_holder > 0, ProgramErrorCode::InvalidDonglePrice);
     ctx.accounts.admin_state.dongle_price_nft_holder = dongle_price_nft_holder;
     msg!("Dongle price for NFT holders updated to: {}", dongle_price_nft_holder);
     Ok(())
 }
 
 pub fn update_dongle_price_normal_handler(ctx: Context<UpdateAdminInfo>, dongle_price_normal: u64) -> Result<()> {
+    require!(dongle_price_normal > 0, ProgramErrorCode::InvalidDonglePrice);
     ctx.accounts.admin_state.dongle_price_normal = dongle_price_normal;
     msg!("Dongle price for normal users updated to: {}", dongle_price_normal);
     Ok(())
@@ -64,6 +67,12 @@ pub fn update_super_admin_handler(ctx: Context<UpdateAdminInfo>, new_super_admin
     require!(
         new_super_admin != Pubkey::default(),
         ProgramErrorCode::InvalidSuperAdmin
+    );
+
+    // Validate that new admin is different from current admin
+    require!(
+        new_super_admin != ctx.accounts.admin_state.super_admin,
+        ProgramErrorCode::SameSuperAdmin
     );
 
     let old_admin = ctx.accounts.admin_state.super_admin;

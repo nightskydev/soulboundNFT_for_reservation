@@ -26,6 +26,12 @@ pub fn handler(ctx: Context<UpdateWithdrawWallet>, new_withdraw_wallet: Pubkey) 
         ProgramErrorCode::InvalidWithdrawWallet
     );
 
+    // Validate that new wallet is different from current wallet
+    require!(
+        new_withdraw_wallet != ctx.accounts.admin_state.withdraw_wallet,
+        ProgramErrorCode::SameWithdrawWallet
+    );
+
     let old_wallet = ctx.accounts.admin_state.withdraw_wallet;
     ctx.accounts.admin_state.withdraw_wallet = new_withdraw_wallet;
 

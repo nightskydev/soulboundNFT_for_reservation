@@ -323,6 +323,12 @@ pub fn handler(ctx: Context<MintNft>, name: String, symbol: String, uri: String)
         signer,
     )?;
 
+    // Runtime validation: ensure mint fee is valid (defense in depth)
+    require!(
+        ctx.accounts.admin_state.mint_fee > 0,
+        ProgramErrorCode::InvalidMintFee
+    );
+
     // Transfer payment tokens (e.g., USDC) from payer to vault
     transfer_checked(
         CpiContext::new(

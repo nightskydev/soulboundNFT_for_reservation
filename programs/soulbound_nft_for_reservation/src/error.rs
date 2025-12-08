@@ -46,4 +46,12 @@ pub enum ProgramErrorCode {
     VaultNotEmpty,
     #[msg("New payment mint must be different from current")]
     SamePaymentMint,
+    #[msg("Invalid mint fee - must be greater than 0")]
+    InvalidMintFee,
+    #[msg("Invalid dongle price - must be greater than 0")]
+    InvalidDonglePrice,
+    #[msg("New withdraw wallet must be different from current")]
+    SameWithdrawWallet,
+    #[msg("New super admin must be different from current")]
+    SameSuperAdmin,
 }

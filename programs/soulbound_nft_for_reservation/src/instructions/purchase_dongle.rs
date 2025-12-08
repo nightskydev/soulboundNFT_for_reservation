@@ -83,6 +83,9 @@ pub fn handler(ctx: Context<PurchaseDongle>) -> Result<()> {
         ctx.accounts.admin_state.dongle_price_normal
     };
 
+    // Runtime validation: ensure price is valid (defense in depth)
+    require!(price > 0, ProgramErrorCode::InvalidDonglePrice);
+
     msg!("Dongle price: {} (smallest units)", price);
 
     // Transfer payment tokens from buyer to vault

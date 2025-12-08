@@ -51,13 +51,16 @@ pub struct Withdraw<'info> {
 }
 
 pub fn handler(ctx: Context<Withdraw>, amount: u64) -> Result<()> {
+    // Store original vault balance for logging
+    let vault_balance_before = ctx.accounts.vault.amount;
+    
     msg!("Withdrawing {} tokens from vault to withdraw wallet: {}", 
         amount, ctx.accounts.admin_state.withdraw_wallet);
 
     // Validate amount
     require!(amount > 0, ProgramErrorCode::InvalidWithdrawAmount);
     require!(
-        ctx.accounts.vault.amount >= amount,
+        vault_balance_before >= amount,
         ProgramErrorCode::InsufficientVaultBalance
     );
 
@@ -82,17 +85,23 @@ pub fn handler(ctx: Context<Withdraw>, amount: u64) -> Result<()> {
         ctx.accounts.payment_mint.decimals,
     )?;
 
+    // Calculate remaining balance (vault balance is updated after transfer)
+    let remaining_balance = vault_balance_before
+        .checked_sub(amount)
+        .ok_or(ProgramErrorCode::InsufficientVaultBalance)?;
+    
     msg!(
         "Successfully withdrew {} tokens to {}. Remaining vault balance: {}",
         amount,
         ctx.accounts.admin_state.withdraw_wallet,
-        ctx.accounts.vault.amount - amount
+        remaining_balance
     );
 
     Ok(())
 }
 
 pub fn withdraw_all_handler(ctx: Context<Withdraw>) -> Result<()> {
+    // Read vault balance and validate
     let vault_balance = ctx.accounts.vault.amount;
     
     msg!("Withdrawing all {} tokens from vault to withdraw wallet: {}", 
@@ -125,6 +134,7 @@ pub fn withdraw_all_handler(ctx: Context<Withdraw>) -> Result<()> {
         ctx.accounts.payment_mint.decimals,
     )?;
 
+    // After transfer, vault balance should be 0
     msg!(
         "Successfully withdrew all {} tokens to {}. Vault balance is now 0.",
         vault_balance,

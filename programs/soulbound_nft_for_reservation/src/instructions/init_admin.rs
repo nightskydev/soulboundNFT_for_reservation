@@ -62,6 +62,11 @@ pub fn handler(
         ProgramErrorCode::InvalidWithdrawWallet
     );
 
+    // Validate that prices and fees are greater than 0
+    require!(mint_fee > 0, ProgramErrorCode::InvalidMintFee);
+    require!(dongle_price_nft_holder > 0, ProgramErrorCode::InvalidDonglePrice);
+    require!(dongle_price_normal > 0, ProgramErrorCode::InvalidDonglePrice);
+
     ctx.accounts.admin_state.bump = ctx.bumps.admin_state;
     ctx.accounts.admin_state.super_admin = super_admin_key;
     ctx.accounts.admin_state.withdraw_wallet = withdraw_wallet;
