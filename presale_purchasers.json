@@ -1,0 +1,33 @@
+{
+  "metadata": {
+    "totalPurchasers": 3,
+    "presaleStartDate": null,
+    "presaleEndDate": null,
+    "network": "devnet",
+    "programId": "FY9yewUB1mQnURB7jZzog52LnUideQ35Apfc5WSVe1zD",
+    "generatedAt": "2025-12-16T14:57:59.137Z"
+  },
+  "purchasers": [
+    {
+      "walletAddress": "9h5aTjT5BiAUpzZin8mnhZJpqpYaeMVtVPmcKtACbKz8",
+      "transactionSignature": "55h4KhbKXFpLVru6erN5kVU8FS35txzLy1gBKRqH2DdCoXfZbP1dwUCi3eQDBxxjH99tAjShfhg66X1GT753NEbX",
+      "mintAddress": "NtgHhfeFyfTdm5k1BNE4PaWkuy7zVgtZKkRuRKUAM1n",
+      "mintDate": 1765730917,
+      "blockTime": 1765730917
+    },
+    {
+      "walletAddress": "BUj6XyFHkoPnfFkGiD32euAiFEjS8kLdBuqHqSST15VM",
+      "transactionSignature": "3c1DxgcCnMZWgXsAhSX1eXYrosrEeEQFPnaaQRqvV98jCUT8hJGsjkuqzrbAU3J1Y8VET2W3vKt9p896XqnXdeAd",
+      "mintAddress": "3jWN1JP58vMJEMA95BZMjpN8PtjqNhBuRj1urEaC3fxB",
+      "mintDate": 1765734974,
+      "blockTime": 1765734974
+    },
+    {
+      "walletAddress": "cY9zJQVz8YcZfjjzwzvQkfm7xfWm4ZuWttDjbMmvDfS",
+      "transactionSignature": "4UCcRJAvDDTftt9RKDAbZjK1BwLLzQyMmQi6y8AuAGrr8ruXGNvJdSWmhBKcmsxm9ZUPsEGSQ1DiXQpoMDRh8Rch",
+      "mintAddress": "DnZwyB8UyLPzoix8Gr22FqtY3xU3yZmdDgo5GEC9JG5p",
+      "mintDate": 1765894325,
+      "blockTime": 1765894325
+    }
+  ]
+}
