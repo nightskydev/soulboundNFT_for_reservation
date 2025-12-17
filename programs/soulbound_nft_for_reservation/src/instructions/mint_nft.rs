@@ -15,6 +15,14 @@ use crate::error::ProgramErrorCode;
 use crate::state::*;
 use crate::utils::safe_create_account;
 
+// Event definition
+#[event]
+pub struct MintNftEvent {
+    pub user: Pubkey,
+    pub mint_address: Pubkey,
+    pub timestamp: i64,
+}
+
 #[derive(Accounts)]
 // #[instruction(name: String, symbol: String, uri: String)]
 pub struct MintNft<'info> {
@@ -357,6 +365,13 @@ pub fn handler(ctx: Context<MintNft>, name: String, symbol: String, uri: String)
         "Current reserved count: {}",
         ctx.accounts.admin_state.current_reserved_count
     );
+
+    // Emit event for reliable filtering
+    emit!(MintNftEvent {
+        user: ctx.accounts.signer.key(),
+        mint_address: ctx.accounts.mint.key(),
+        timestamp: clock.unix_timestamp,
+    });
 
     Ok(())
 }

@@ -36,6 +36,16 @@ interface PurchaserInfo {
   blockTime: number;
 }
 
+function createPurchaserInfo(eventData: any, signature: string, blockTime: number): PurchaserInfo {
+  return {
+    walletAddress: eventData.user,
+    transactionSignature: signature,
+    mintAddress: eventData.mint_address,
+    mintDate: eventData.timestamp,
+    blockTime: blockTime,
+  };
+}
+
 async function getAllConfirmedSignatures(
   connection: Connection,
   programId: PublicKey,
@@ -140,43 +150,63 @@ async function getTransactionsFromBlocks(
           return null; // Transaction doesn't involve our program
         }
 
-        // Find our program's instruction in this transaction
-        const instructions = transaction.transaction.message.instructions;
+        // Check for MintNftEvent in transaction logs and program data
+        if (transaction.meta) {
+          const logMessages = transaction.meta.logMessages || [];
 
-        for (const instruction of instructions) {
-          if (instruction.programId.toString() === PROGRAM_ID.toString()) {
-            // Get accounts - handle both ParsedInstruction and PartiallyDecodedInstruction
-            let accounts: PublicKey[] = [];
+          // Method 1: Look for MintNftEvent in log messages (JSON format)
+          const mintNftLog = logMessages.find(log =>
+            log.includes('MintNftEvent') && log.includes('Event:')
+          );
 
-            if ('accounts' in instruction) {
-              // PartiallyDecodedInstruction - accounts are PublicKey objects
-              accounts = instruction.accounts;
-            } else {
-              // ParsedInstruction - accounts are indices into message.accountKeys
-              const accountIndices = (instruction as any).accounts || [];
-              accounts = accountIndices.map((index: number) => new PublicKey(accountKeys[index].pubkey));
-            }
-
-            if (accounts.length >= 12 && accounts.length <= 15) { // mint_nft has ~13 accounts
-              // Extract the signer and mint address
-              const signer = accounts[0];
-              let mintAddress = '';
-              if (accounts.length > 3) {
-                mintAddress = accounts[3].toString();
+          if (mintNftLog) {
+            try {
+              const eventDataMatch = mintNftLog.match(/Event:\s*(\{.*\})/);
+              if (eventDataMatch) {
+                const eventData = JSON.parse(eventDataMatch[1]);
+                return createPurchaserInfo(eventData, sig.signature, transaction.blockTime || 0);
               }
+            } catch (parseError) {
+              console.warn(`Failed to parse MintNftEvent from log: ${mintNftLog}`);
+            }
+          }
 
-              return {
-                walletAddress: signer.toString(),
-                transactionSignature: sig.signature,
-                mintAddress,
-                mintDate: sig.blockTime || transaction.blockTime || 0,
-                blockTime: transaction.blockTime || 0,
-              };
+          // Method 2: Look for event in program return data (binary format)
+          // Anchor events can be emitted as "Program data:" in base64
+          const programDataLog = logMessages.find(log =>
+            log.startsWith('Program data: ')
+          );
+
+          if (programDataLog) {
+            try {
+              // Extract base64 data after "Program data: "
+              const base64Data = programDataLog.replace('Program data: ', '');
+              const eventBuffer = Buffer.from(base64Data, 'base64');
+
+              // Check if this matches our event discriminator (first 8 bytes)
+              const expectedDiscriminator = Buffer.from([176, 112, 170, 107, 46, 35, 212, 160]); // From IDL
+
+              if (eventBuffer.length >= 80 && eventBuffer.subarray(0, 8).equals(expectedDiscriminator)) {
+                // Parse the event data (32 bytes user + 32 bytes mint_address + 8 bytes timestamp)
+                const user = new PublicKey(eventBuffer.subarray(8, 40));
+                const mintAddress = new PublicKey(eventBuffer.subarray(40, 72));
+                const timestamp = eventBuffer.readBigInt64LE(72);
+
+                const eventData = {
+                  user: user.toString(),
+                  mint_address: mintAddress.toString(),
+                  timestamp: Number(timestamp)
+                };
+
+                return createPurchaserInfo(eventData, sig.signature, transaction.blockTime || 0);
+              }
+            } catch (parseError) {
+              console.warn(`Failed to parse MintNftEvent from program data: ${programDataLog}`);
             }
           }
         }
 
-        // If we get here, no mint_nft instruction was found
+        // If we get here, no MintNftEvent was found
         return null;
 
         } catch (error: any) {

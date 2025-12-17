@@ -3,7 +3,8 @@
         "lint:fix": "prettier */*.js \"*/**/*{.js,.ts}\" -w",
         "lint": "prettier */*.js \"*/**/*{.js,.ts}\" --check",
         "init-admin": "ts-node scripts/init_admin.ts",
-        "query-presale": "ts-node scripts/query_presale_purchasers.ts"
+        "query-presale": "ts-node scripts/query_presale_purchasers.ts",
+        "parse-sig": "ts-node scripts/parse_signature.ts"
     },
     "dependencies": {
         "@coral-xyz/anchor": "^0.30.0",
