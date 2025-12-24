@@ -80,6 +80,10 @@ pub struct MintNft<'info> {
 
     /// Token program for payment (can be Token or Token2022)
     pub payment_token_program: Interface<'info, TokenInterface>,
+
+    // === Optional Collection ===
+    /// CHECK: Optional collection mint account for grouping NFTs
+    pub collection_mint: Option<AccountInfo<'info>>,
 }
 
 pub fn handler(ctx: Context<MintNft>, name: String, symbol: String, uri: String) -> Result<()> {
@@ -211,11 +215,25 @@ pub fn handler(ctx: Context<MintNft>, name: String, symbol: String, uri: String)
     let bump = ctx.bumps.admin_state;
     let signer: &[&[&[u8]]] = &[&[seeds, &[bump]]];
 
-    let metadata = spl_token_metadata_interface::state::TokenMetadata {
-        name,
-        symbol,
-        uri,
-        ..Default::default()
+    let metadata = if let Some(collection_mint) = &ctx.accounts.collection_mint {
+        // If collection is provided, include collection info
+        spl_token_metadata_interface::state::TokenMetadata {
+            name,
+            symbol,
+            uri,
+            additional_metadata: vec![
+                ("collection".to_string(), collection_mint.key().to_string()),
+            ],
+            ..Default::default()
+        }
+    } else {
+        // No collection, just basic metadata
+        spl_token_metadata_interface::state::TokenMetadata {
+            name,
+            symbol,
+            uri,
+            ..Default::default()
+        }
     };
 
     // we need to add rent for TokenMetadata extension to reallocate space

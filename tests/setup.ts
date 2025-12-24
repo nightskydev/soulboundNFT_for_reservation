@@ -27,12 +27,15 @@ export class TestContext {
   newWithdrawWallet: Keypair;
   user: Keypair;
   user2: Keypair; // Second user for testing
+  user3: Keypair; // Third user for collection NFT testing
 
-  // Payment related
+  // Admin and payment related
+  adminState: PublicKey;
   paymentMint: PublicKey;
   wrongPaymentMint: PublicKey; // For testing invalid payment mint
   userTokenAccount: PublicKey;
   user2TokenAccount: PublicKey;
+  user3TokenAccount: PublicKey;
   withdrawWalletTokenAccount: PublicKey;
   newWithdrawWalletTokenAccount: PublicKey;
   vault: PublicKey;
@@ -40,6 +43,12 @@ export class TestContext {
   // Track minted NFT for burn tests
   mintedNftMint: PublicKey | null = null;
   mintedNftTokenAccount: PublicKey | null = null;
+
+  // Collection related
+  collectionMint: PublicKey | null = null;
+  collectionTokenAccount: PublicKey | null = null;
+  collectionNftMint: PublicKey | null = null;
+  collectionNftTokenAccount: PublicKey | null = null;
 
   // Constants
   readonly PAYMENT_DECIMALS = 6;
@@ -62,6 +71,7 @@ export class TestContext {
     this.newWithdrawWallet = Keypair.generate();
     this.user = Keypair.generate();
     this.user2 = Keypair.generate();
+    this.user3 = Keypair.generate();
   }
 
   static getInstance(): TestContext {
@@ -104,6 +114,13 @@ export class TestContext {
     );
     console.log("Wrong payment mint:", this.wrongPaymentMint.toBase58());
 
+    // Derive admin state PDA
+    [this.adminState] = await anchor.web3.PublicKey.findProgramAddress(
+      [Buffer.from("admin_state")],
+      this.program.programId
+    );
+    console.log("Admin state PDA:", this.adminState.toBase58());
+
     // Derive vault PDA
     [this.vault] = await anchor.web3.PublicKey.findProgramAddress(
       [Buffer.from("vault"), this.paymentMint.toBuffer()],
@@ -134,6 +151,7 @@ export class TestContext {
     const airdropTargets = [
       this.user,
       this.user2,
+      this.user3,
     ];
     for (const target of airdropTargets) {
       const sig = await this.provider.connection.requestAirdrop(
@@ -187,11 +205,34 @@ export class TestContext {
       TOKEN_PROGRAM_ID
     );
 
+    // Create user3's token account and mint USDC
+    this.user3TokenAccount = await createAssociatedTokenAccount(
+      this.provider.connection,
+      this.superAdmin.payer,
+      this.paymentMint,
+      this.user3.publicKey,
+      undefined,
+      TOKEN_PROGRAM_ID
+    );
+
+    await mintTo(
+      this.provider.connection,
+      this.superAdmin.payer,
+      this.paymentMint,
+      this.user3TokenAccount,
+      this.superAdmin.publicKey,
+      100 * 10 ** this.PAYMENT_DECIMALS,
+      [],
+      undefined,
+      TOKEN_PROGRAM_ID
+    );
+
     console.log("Super admin:", this.superAdmin.publicKey.toBase58());
     console.log("Withdraw wallet:", this.withdrawWallet.publicKey.toBase58());
     console.log("New withdraw wallet:", this.newWithdrawWallet.publicKey.toBase58());
     console.log("User:", this.user.publicKey.toBase58());
     console.log("User 2:", this.user2.publicKey.toBase58());
+    console.log("User 3:", this.user3.publicKey.toBase58());
 
     this.initialized = true;
   }
@@ -210,6 +251,14 @@ export class TestContext {
       this.program.programId
     );
     return userState;
+  }
+
+  async getCollectionStatePDA(collectionMint: PublicKey): Promise<PublicKey> {
+    const [collectionState] = await anchor.web3.PublicKey.findProgramAddress(
+      [Buffer.from("collection"), collectionMint.toBuffer()],
+      this.program.programId
+    );
+    return collectionState;
   }
 
   async fetchAdminState() {

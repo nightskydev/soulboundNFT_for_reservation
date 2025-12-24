@@ -77,6 +77,10 @@ pub mod soulbound_nft_for_reservation {
         instructions::update_payment_mint::handler(ctx)
     }
 
+    pub fn create_collection_nft(ctx: Context<CreateCollectionNft>, name: String, symbol: String, uri: String) -> Result<()> {
+        instructions::create_collection_nft::handler(ctx, name, symbol, uri)
+    }
+
     pub fn mint_nft(ctx: Context<MintNft>, name: String, symbol: String, uri: String) -> Result<()> {
         instructions::mint_nft::handler(ctx, name, symbol, uri)
     }

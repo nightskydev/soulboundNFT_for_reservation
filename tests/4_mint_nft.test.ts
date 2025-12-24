@@ -6,13 +6,53 @@ import {
   getAccount,
   createAssociatedTokenAccount,
 } from "@solana/spl-token";
-import { Keypair } from "@solana/web3.js";
+import { Keypair, PublicKey } from "@solana/web3.js";
 import assert from "assert";
 import { ctx, TOKEN_PROGRAM_ID } from "./setup";
 
-describe("mint_nft", () => {
+describe("NFT Collection and Minting", () => {
   before(async () => {
     await ctx.initialize();
+  });
+
+  describe("Collection Creation", () => {
+    it("should successfully create a collection NFT", async () => {
+      const collectionMint = Keypair.generate();
+
+      // Derive collection state PDA
+      const [collectionState] = PublicKey.findProgramAddressSync(
+        [Buffer.from("collection"), collectionMint.publicKey.toBuffer()],
+        ctx.program.programId
+      );
+
+      const tx = await ctx.program.methods
+        .createCollectionNft("Test Collection", "COLL", "https://example.com/collection")
+        .accounts({
+          signer: ctx.superAdmin.publicKey,
+          collectionMint: collectionMint.publicKey,
+          collectionState: collectionState,
+          systemProgram: ctx.provider.connection.systemProgram,
+          tokenProgram: TOKEN_2022_PROGRAM_ID,
+          adminState: ctx.adminState,
+        })
+        .signers([collectionMint, ctx.superAdmin.payer])
+        .rpc({ skipPreflight: true });
+
+      await ctx.provider.connection.confirmTransaction(tx, "confirmed");
+      console.log("Create collection tx:", tx);
+
+      // Store collection info for later tests
+      ctx.collectionMint = collectionMint.publicKey;
+
+      // Verify collection state
+      const collectionStateData = await ctx.program.account.collectionState.fetch(collectionState);
+      assert.strictEqual(collectionStateData.name, "Test Collection");
+      assert.strictEqual(collectionStateData.symbol, "COLL");
+      assert.strictEqual(collectionStateData.uri, "https://example.com/collection");
+      assert.strictEqual(collectionStateData.collectionMint.toBase58(), collectionMint.publicKey.toBase58());
+      assert.ok(collectionStateData.isVerified);
+      console.log("✓ Collection created successfully");
+    });
   });
 
   describe("Failure Cases (Pre-mint)", () => {
@@ -52,6 +92,7 @@ describe("mint_nft", () => {
             paymentMint: ctx.paymentMint,
             payerTokenAccount: ctx.userTokenAccount,
             paymentTokenProgram: TOKEN_PROGRAM_ID,
+            collectionMint: null, // No collection
           })
           .signers([mint, ctx.user])
           .rpc({ skipPreflight: true });
@@ -102,6 +143,7 @@ describe("mint_nft", () => {
             paymentMint: ctx.wrongPaymentMint, // Wrong mint!
             payerTokenAccount: wrongUserTokenAccount,
             paymentTokenProgram: TOKEN_PROGRAM_ID,
+            collectionMint: null, // No collection
           })
           .signers([mint, ctx.user])
           .rpc({ skipPreflight: true });
@@ -137,6 +179,7 @@ describe("mint_nft", () => {
           paymentMint: ctx.paymentMint,
           payerTokenAccount: ctx.userTokenAccount,
           paymentTokenProgram: TOKEN_PROGRAM_ID,
+          collectionMint: null, // No collection for standalone NFT
         })
         .signers([mint, ctx.user])
         .rpc({ skipPreflight: true });
@@ -194,6 +237,71 @@ describe("mint_nft", () => {
       );
       console.log("NFT mint date:", new Date(mintDate * 1000).toISOString());
     });
+
+    it("should successfully mint NFT with collection", async () => {
+      const mint = Keypair.generate();
+      const tokenAccount = getAssociatedTokenAddressSync(
+        mint.publicKey,
+        ctx.user3.publicKey,
+        false,
+        TOKEN_2022_PROGRAM_ID,
+        ASSOCIATED_TOKEN_PROGRAM_ID
+      );
+
+      // Use the collection created earlier
+      const vaultBefore = await getAccount(ctx.provider.connection, ctx.vault);
+      const vaultBalanceBefore = Number(vaultBefore.amount);
+
+      const tx = await ctx.program.methods
+        .mintNft("Collection NFT #1", "CNFT", "https://example.com/collection-nft-1")
+        .accounts({
+          signer: ctx.user3.publicKey,
+          tokenAccount: tokenAccount,
+          mint: mint.publicKey,
+          paymentMint: ctx.paymentMint,
+          payerTokenAccount: ctx.user3TokenAccount,
+          paymentTokenProgram: TOKEN_PROGRAM_ID,
+          collectionMint: ctx.collectionMint, // Use the created collection
+        })
+        .signers([mint, ctx.user3])
+        .rpc({ skipPreflight: true });
+
+      await ctx.provider.connection.confirmTransaction(tx, "confirmed");
+      console.log("Mint collection NFT tx:", tx);
+
+      // Store minted NFT info for burn tests
+      ctx.collectionNftMint = mint.publicKey;
+      ctx.collectionNftTokenAccount = tokenAccount;
+
+      // Verify vault received payment
+      const vaultAfter = await getAccount(ctx.provider.connection, ctx.vault);
+      const vaultBalanceAfter = Number(vaultAfter.amount);
+      const expectedFee = ctx.MINT_FEE * 2; // Doubled in update_admin test
+
+      assert.strictEqual(
+        vaultBalanceAfter - vaultBalanceBefore,
+        expectedFee,
+        "Vault should receive mint fee for collection NFT"
+      );
+
+      // Verify admin state updated (should be 2 now - 1 standalone + 1 collection NFT)
+      const state = await ctx.fetchAdminState();
+      assert.strictEqual(
+        state.currentReservedCount.toNumber(),
+        2,
+        "Reserved count should be 2"
+      );
+
+      // Verify user3 state updated
+      const userState = await ctx.fetchUserState(ctx.user3.publicKey);
+      assert.strictEqual(
+        userState.nftAddress.toBase58(),
+        mint.publicKey.toBase58(),
+        "User3 state should store collection NFT address"
+      );
+
+      console.log("✓ Collection NFT minted successfully");
+    });
   });
 
   describe("Failure Cases (Post-mint)", () => {
@@ -218,6 +326,7 @@ describe("mint_nft", () => {
             paymentMint: ctx.paymentMint,
             payerTokenAccount: ctx.userTokenAccount,
             paymentTokenProgram: TOKEN_PROGRAM_ID,
+            collectionMint: null, // No collection
           })
           .signers([mint, ctx.user])
           .rpc({ skipPreflight: true });
@@ -230,9 +339,9 @@ describe("mint_nft", () => {
     });
 
     it("should fail when max supply is reached (MaxSupplyReached)", async () => {
-      // Set max supply to current count (1)
+      // Set max supply to current count (2 - 1 standalone + 1 collection)
       await ctx.program.methods
-        .updateMaxSupply(new anchor.BN(1)) // Set max supply to 1 (already minted 1)
+        .updateMaxSupply(new anchor.BN(2)) // Set max supply to 2 (already minted 2)
         .accounts({
           superAdmin: ctx.superAdmin.publicKey,
         })
@@ -258,6 +367,7 @@ describe("mint_nft", () => {
             paymentMint: ctx.paymentMint,
             payerTokenAccount: ctx.user2TokenAccount,
             paymentTokenProgram: TOKEN_PROGRAM_ID,
+            collectionMint: null, // No collection
           })
           .signers([mint, ctx.user2])
           .rpc({ skipPreflight: true });
@@ -296,6 +406,7 @@ describe("mint_nft", () => {
           paymentMint: ctx.paymentMint,
           payerTokenAccount: ctx.user2TokenAccount,
           paymentTokenProgram: TOKEN_PROGRAM_ID,
+          collectionMint: null, // No collection
         })
         .signers([mint, ctx.user2])
         .rpc({ skipPreflight: true });
@@ -306,8 +417,8 @@ describe("mint_nft", () => {
       const state = await ctx.fetchAdminState();
       assert.strictEqual(
         state.currentReservedCount.toNumber(),
-        2,
-        "Reserved count should be 2"
+        3,
+        "Reserved count should be 3"
       );
     });
   });

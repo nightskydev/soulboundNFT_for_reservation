@@ -144,6 +144,7 @@ describe("purchase_dongle", () => {
             paymentMint: ctx.paymentMint,
             payerTokenAccount: ctx.userTokenAccount,
             paymentTokenProgram: TOKEN_PROGRAM_ID,
+            collectionMint: null,
           })
           .signers([mint, ctx.user])
           .rpc({ skipPreflight: true });
@@ -206,6 +207,7 @@ describe("purchase_dongle", () => {
             paymentMint: ctx.paymentMint,
             payerTokenAccount: ctx.userTokenAccount,
             paymentTokenProgram: TOKEN_PROGRAM_ID,
+            collectionMint: null,
           })
           .signers([mint, ctx.user])
           .rpc({ skipPreflight: true });
@@ -594,6 +596,7 @@ describe("purchase_dongle", () => {
           paymentMint: ctx.paymentMint,
           payerTokenAccount: poorUserTokenAccount,
           paymentTokenProgram: TOKEN_PROGRAM_ID,
+          collectionMint: null,
         })
         .signers([mint, poorUser])
         .rpc({ skipPreflight: true });

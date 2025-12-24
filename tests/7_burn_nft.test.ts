@@ -54,6 +54,7 @@ describe("burn_nft", () => {
         paymentMint: ctx.paymentMint,
         payerTokenAccount: ctx.userTokenAccount,
         paymentTokenProgram: TOKEN_PROGRAM_ID,
+        collectionMint: null,
       })
       .signers([mint, ctx.user])
       .rpc({ skipPreflight: true });
@@ -212,6 +213,7 @@ describe("burn_nft", () => {
           paymentMint: ctx.paymentMint,
           payerTokenAccount: ctx.userTokenAccount,
           paymentTokenProgram: TOKEN_PROGRAM_ID,
+          collectionMint: null,
         })
         .signers([mint, ctx.user])
         .rpc({ skipPreflight: true });
