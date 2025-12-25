@@ -61,6 +61,16 @@ pub mod soulbound_nft_for_reservation {
         instructions::update_admin::update_purchase_started_handler(ctx, purchase_started)
     }
 
+    /// Update OG collection address (super_admin only)
+    pub fn update_og_collection(ctx: Context<UpdateAdminInfo>, og_collection: Pubkey) -> Result<()> {
+        instructions::update_admin::update_og_collection_handler(ctx, og_collection)
+    }
+
+    /// Update dongle proof collection address (super_admin only)
+    pub fn update_dongle_proof_collection(ctx: Context<UpdateAdminInfo>, dongle_proof_collection: Pubkey) -> Result<()> {
+        instructions::update_admin::update_dongle_proof_collection_handler(ctx, dongle_proof_collection)
+    }
+
     /// Update withdraw wallet (super_admin only)
     pub fn update_withdraw_wallet(ctx: Context<UpdateWithdrawWallet>, new_withdraw_wallet: Pubkey) -> Result<()> {
         instructions::update_withdraw_wallet::handler(ctx, new_withdraw_wallet)

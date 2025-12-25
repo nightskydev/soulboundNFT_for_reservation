@@ -2187,6 +2187,7 @@ dependencies = [
  "arrayref",
  "borsh 0.10.3",
  "mpl-core",
+ "mpl-token-metadata",
  "mpl-utils",
  "num-derive 0.4.2",
  "num-traits",

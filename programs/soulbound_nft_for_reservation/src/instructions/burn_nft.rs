@@ -1,11 +1,11 @@
 use anchor_lang::prelude::*;
 use anchor_spl::{
-    associated_token::AssociatedToken, token_2022, token_2022::Burn, token_interface::Token2022,
+    associated_token::AssociatedToken,
+    token::{self, Token, Burn},
 };
 use solana_program::program::{invoke, invoke_signed};
-use anchor_spl::token_2022::spl_token_2022;
 use spl_associated_token_account::get_associated_token_address_with_program_id;
-use spl_token_2022::id as token_2022_program_id;
+use spl_token::id as token_program_id;
 
 use crate::state::*;
 use crate::error::ProgramErrorCode;
@@ -15,7 +15,7 @@ pub struct BurnNft<'info> {
     #[account(mut)]
     pub signer: Signer<'info>,
     pub system_program: Program<'info, System>,
-    pub token_program: Program<'info, Token2022>,
+    pub token_program: Program<'info, Token>,
     /// CHECK: Validated in handler that this is the correct ATA
     #[account(mut)]
     pub old_token_account: AccountInfo<'info>,
@@ -54,11 +54,11 @@ pub fn handler(
         ProgramErrorCode::UserDoesNotOwnNft
     );
 
-    // Validate that old_token_account is the correct associated token account for Token-2022
+    // Validate that old_token_account is the correct associated token account for regular Token
     let expected_ata = get_associated_token_address_with_program_id(
         &ctx.accounts.signer.key(),
         &ctx.accounts.old_mint.key(),
-        &token_2022_program_id(),
+        &token_program_id(),
     );
     msg!("expected_ata (burn_nft): {:?}", expected_ata.to_string());
     msg!(
@@ -75,7 +75,7 @@ pub fn handler(
     let signer: &[&[&[u8]]] = &[&[seeds, &[bump]]];
 
     // burn old token
-    token_2022::burn(
+    token::burn(
         CpiContext::new(
             ctx.accounts.token_program.to_account_info(),
             Burn {
@@ -89,11 +89,11 @@ pub fn handler(
 
     // Close user account
     invoke(
-        &spl_token_2022::instruction::close_account(
-            ctx.accounts.token_program.key,
-            ctx.accounts.old_token_account.to_account_info().key,
-            ctx.accounts.signer.key,
-            ctx.accounts.signer.key,
+        &spl_token::instruction::close_account(
+            &ctx.accounts.token_program.key(),
+            &ctx.accounts.old_token_account.to_account_info().key,
+            &ctx.accounts.signer.key,
+            &ctx.accounts.signer.key,
             &[],
         )?,
         &[
@@ -104,12 +104,13 @@ pub fn handler(
         ],
     )?;
 
-    // Close mint
+    // Close mint - for regular tokens, we need to revoke freeze authority first if it exists
+    // Then close the mint account
     invoke_signed(
-        &spl_token_2022::instruction::close_account(
-            ctx.accounts.token_program.key,
-            ctx.accounts.old_mint.to_account_info().key,
-            ctx.accounts.signer.key,
+        &spl_token::instruction::close_account(
+            &ctx.accounts.token_program.key(),
+            &ctx.accounts.old_mint.to_account_info().key,
+            &ctx.accounts.signer.key,
             &ctx.accounts.admin_state.key(),
             &[],
         )?,

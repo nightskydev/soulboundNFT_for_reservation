@@ -16,42 +16,96 @@ describe("NFT Collection and Minting", () => {
   });
 
   describe("Collection Creation", () => {
-    it("should successfully create a collection NFT", async () => {
-      const collectionMint = Keypair.generate();
+    it("should successfully create OG collection NFT", async () => {
+      const ogCollectionMint = Keypair.generate();
 
       // Derive collection state PDA
-      const [collectionState] = PublicKey.findProgramAddressSync(
-        [Buffer.from("collection"), collectionMint.publicKey.toBuffer()],
+      const [ogCollectionState] = PublicKey.findProgramAddressSync(
+        [Buffer.from("collection"), ogCollectionMint.publicKey.toBuffer()],
         ctx.program.programId
       );
 
       const tx = await ctx.program.methods
-        .createCollectionNft("Test Collection", "COLL", "https://example.com/collection")
+        .createCollectionNft("OG Collection", "OG", "https://example.com/og-collection")
         .accounts({
           signer: ctx.superAdmin.publicKey,
-          collectionMint: collectionMint.publicKey,
-          collectionState: collectionState,
+          collectionMint: ogCollectionMint.publicKey,
+          collectionState: ogCollectionState,
           systemProgram: ctx.provider.connection.systemProgram,
           tokenProgram: TOKEN_2022_PROGRAM_ID,
           adminState: ctx.adminState,
         })
-        .signers([collectionMint, ctx.superAdmin.payer])
+        .signers([ogCollectionMint, ctx.superAdmin.payer])
         .rpc({ skipPreflight: true });
 
       await ctx.provider.connection.confirmTransaction(tx, "confirmed");
-      console.log("Create collection tx:", tx);
+      console.log("Create OG collection tx:", tx);
 
-      // Store collection info for later tests
-      ctx.collectionMint = collectionMint.publicKey;
+      // Set OG collection in admin state
+      await ctx.program.methods
+        .updateOgCollection(ogCollectionMint.publicKey)
+        .accounts({
+          superAdmin: ctx.superAdmin.publicKey,
+        })
+        .rpc({ skipPreflight: true });
+
+      // Store OG collection info for later tests
+      ctx.ogCollectionMint = ogCollectionMint.publicKey;
 
       // Verify collection state
-      const collectionStateData = await ctx.program.account.collectionState.fetch(collectionState);
-      assert.strictEqual(collectionStateData.name, "Test Collection");
-      assert.strictEqual(collectionStateData.symbol, "COLL");
-      assert.strictEqual(collectionStateData.uri, "https://example.com/collection");
-      assert.strictEqual(collectionStateData.collectionMint.toBase58(), collectionMint.publicKey.toBase58());
+      const collectionStateData = await ctx.program.account.collectionState.fetch(ogCollectionState);
+      assert.strictEqual(collectionStateData.name, "OG Collection");
+      assert.strictEqual(collectionStateData.symbol, "OG");
+      assert.strictEqual(collectionStateData.uri, "https://example.com/og-collection");
+      assert.strictEqual(collectionStateData.collectionMint.toBase58(), ogCollectionMint.publicKey.toBase58());
       assert.ok(collectionStateData.isVerified);
-      console.log("✓ Collection created successfully");
+      console.log("✓ OG Collection created successfully");
+    });
+
+    it("should successfully create Dongle Proof collection NFT", async () => {
+      const dongleProofCollectionMint = Keypair.generate();
+
+      // Derive collection state PDA
+      const [dongleProofCollectionState] = PublicKey.findProgramAddressSync(
+        [Buffer.from("collection"), dongleProofCollectionMint.publicKey.toBuffer()],
+        ctx.program.programId
+      );
+
+      const tx = await ctx.program.methods
+        .createCollectionNft("Dongle Proof Collection", "DONGLE", "https://example.com/dongle-collection")
+        .accounts({
+          signer: ctx.superAdmin.publicKey,
+          collectionMint: dongleProofCollectionMint.publicKey,
+          collectionState: dongleProofCollectionState,
+          systemProgram: ctx.provider.connection.systemProgram,
+          tokenProgram: TOKEN_2022_PROGRAM_ID,
+          adminState: ctx.adminState,
+        })
+        .signers([dongleProofCollectionMint, ctx.superAdmin.payer])
+        .rpc({ skipPreflight: true });
+
+      await ctx.provider.connection.confirmTransaction(tx, "confirmed");
+      console.log("Create Dongle Proof collection tx:", tx);
+
+      // Set Dongle Proof collection in admin state
+      await ctx.program.methods
+        .updateDongleProofCollection(dongleProofCollectionMint.publicKey)
+        .accounts({
+          superAdmin: ctx.superAdmin.publicKey,
+        })
+        .rpc({ skipPreflight: true });
+
+      // Store Dongle Proof collection info for later tests
+      ctx.dongleProofCollectionMint = dongleProofCollectionMint.publicKey;
+
+      // Verify collection state
+      const collectionStateData = await ctx.program.account.collectionState.fetch(dongleProofCollectionState);
+      assert.strictEqual(collectionStateData.name, "Dongle Proof Collection");
+      assert.strictEqual(collectionStateData.symbol, "DONGLE");
+      assert.strictEqual(collectionStateData.uri, "https://example.com/dongle-collection");
+      assert.strictEqual(collectionStateData.collectionMint.toBase58(), dongleProofCollectionMint.publicKey.toBase58());
+      assert.ok(collectionStateData.isVerified);
+      console.log("✓ Dongle Proof Collection created successfully");
     });
   });
 
@@ -261,7 +315,7 @@ describe("NFT Collection and Minting", () => {
           paymentMint: ctx.paymentMint,
           payerTokenAccount: ctx.user3TokenAccount,
           paymentTokenProgram: TOKEN_PROGRAM_ID,
-          collectionMint: ctx.collectionMint, // Use the created collection
+          collectionMint: ctx.ogCollectionMint, // Use the OG collection
         })
         .signers([mint, ctx.user3])
         .rpc({ skipPreflight: true });

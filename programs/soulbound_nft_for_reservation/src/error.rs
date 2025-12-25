@@ -54,4 +54,6 @@ pub enum ProgramErrorCode {
     SameWithdrawWallet,
     #[msg("New super admin must be different from current")]
     SameSuperAdmin,
+    #[msg("Invalid collection address - cannot be empty")]
+    InvalidCollection,
 }

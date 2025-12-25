@@ -45,8 +45,8 @@ export class TestContext {
   mintedNftTokenAccount: PublicKey | null = null;
 
   // Collection related
-  collectionMint: PublicKey | null = null;
-  collectionTokenAccount: PublicKey | null = null;
+  ogCollectionMint: PublicKey | null = null;
+  dongleProofCollectionMint: PublicKey | null = null;
   collectionNftMint: PublicKey | null = null;
   collectionNftTokenAccount: PublicKey | null = null;
 

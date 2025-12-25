@@ -62,6 +62,30 @@ pub fn update_purchase_started_handler(ctx: Context<UpdateAdminInfo>, purchase_s
     Ok(())
 }
 
+pub fn update_og_collection_handler(ctx: Context<UpdateAdminInfo>, og_collection: Pubkey) -> Result<()> {
+    // Validate that og_collection is not empty
+    require!(
+        og_collection != Pubkey::default(),
+        ProgramErrorCode::InvalidCollection
+    );
+
+    ctx.accounts.admin_state.og_collection = og_collection;
+    msg!("OG collection updated to: {}", og_collection);
+    Ok(())
+}
+
+pub fn update_dongle_proof_collection_handler(ctx: Context<UpdateAdminInfo>, dongle_proof_collection: Pubkey) -> Result<()> {
+    // Validate that dongle_proof_collection is not empty
+    require!(
+        dongle_proof_collection != Pubkey::default(),
+        ProgramErrorCode::InvalidCollection
+    );
+
+    ctx.accounts.admin_state.dongle_proof_collection = dongle_proof_collection;
+    msg!("Dongle proof collection updated to: {}", dongle_proof_collection);
+    Ok(())
+}
+
 pub fn update_super_admin_handler(ctx: Context<UpdateAdminInfo>, new_super_admin: Pubkey) -> Result<()> {
     // Validate that new_super_admin is not empty
     require!(

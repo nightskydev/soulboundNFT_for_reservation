@@ -1,18 +1,14 @@
 use anchor_lang::prelude::*;
-use anchor_spl::token_2022::spl_token_2022::extension::{
-    BaseStateWithExtensions, StateWithExtensions,
-};
-use anchor_spl::token_2022::spl_token_2022::{self, extension::ExtensionType};
-use anchor_spl::token_2022_extensions::spl_token_metadata_interface;
 use anchor_spl::{
-    token_2022,
-    token_2022::Token2022,
+    token::{Token, Mint},
 };
-use solana_program::program::{invoke, invoke_signed};
+use mpl_token_metadata::{
+    instructions::{CreateMetadataAccountV3, CreateMasterEditionV3},
+    types::{DataV2, Creator},
+};
+use solana_program::program::invoke_signed;
 
-use crate::error::ProgramErrorCode;
 use crate::state::*;
-use crate::utils::safe_create_account;
 
 // Event definition
 #[event]
@@ -29,9 +25,35 @@ pub struct CreateCollectionNft<'info> {
     #[account(mut)]
     pub signer: Signer<'info>,
     pub system_program: Program<'info, System>,
-    pub token_program: Program<'info, Token2022>,
-    #[account(mut)]
-    pub collection_mint: Signer<'info>,
+    pub token_program: Program<'info, Token>,
+    #[account(
+        init,
+        payer = signer,
+        mint::decimals = 0,
+        mint::authority = admin_state,
+        mint::freeze_authority = admin_state,
+    )]
+    pub collection_mint: Account<'info, Mint>,
+    pub rent: Sysvar<'info, Rent>,
+
+    /// CHECK: Metaplex Token Metadata program
+    pub token_metadata_program: AccountInfo<'info>,
+    /// CHECK: Metadata account for the collection
+    #[account(
+        mut,
+        seeds = [b"metadata", token_metadata_program.key().as_ref(), collection_mint.key().as_ref()],
+        bump,
+        seeds::program = token_metadata_program.key(),
+    )]
+    pub metadata_account: AccountInfo<'info>,
+    /// CHECK: Master edition account for the collection
+    #[account(
+        mut,
+        seeds = [b"metadata", token_metadata_program.key().as_ref(), collection_mint.key().as_ref(), b"edition"],
+        bump,
+        seeds::program = token_metadata_program.key(),
+    )]
+    pub master_edition_account: AccountInfo<'info>,
 
     /// CHECK: The collection state PDA to track collection info
     #[account(
@@ -54,141 +76,90 @@ pub struct CreateCollectionNft<'info> {
 pub fn handler(ctx: Context<CreateCollectionNft>, name: String, symbol: String, uri: String) -> Result<()> {
     msg!("Create collection NFT");
 
-    let space = ExtensionType::try_calculate_account_len::<spl_token_2022::state::Mint>(&[
-        ExtensionType::MintCloseAuthority,
-        ExtensionType::MetadataPointer,
-    ])?;
+    // Collection mint is already initialized by the init constraint above
 
-    let lamports = Rent::get()?.minimum_balance(space);
-
-    msg!(
-        "Create Collection Mint and metadata account size and cost: {} lamports: {}",
-        space as u64,
-        lamports
-    );
-
-    // create collection mint account
-    safe_create_account(
-        ctx.accounts.system_program.to_account_info(),
-        ctx.accounts.signer.to_account_info(),
-        ctx.accounts.collection_mint.to_account_info(),
-        &ctx.accounts.token_program.key(),
-        lamports,
-        space as u64,
-        &[],
-    )?;
-
-    // initialize MintCloseAuthority extension
-    invoke(
-        &spl_token_2022::instruction::initialize_mint_close_authority(
-            ctx.accounts.token_program.key,
-            ctx.accounts.collection_mint.key,
-            Some(&ctx.accounts.admin_state.key()),
-        )?,
-        &[
-            ctx.accounts.collection_mint.to_account_info(),
-            ctx.accounts.admin_state.to_account_info(),
-            ctx.accounts.token_program.to_account_info(),
-        ],
-    )?;
-
-    // Initialize the metadata pointer
-    let init_meta_data_pointer_ix =
-        match spl_token_2022::extension::metadata_pointer::instruction::initialize(
-            &Token2022::id(),
-            &ctx.accounts.collection_mint.key(),
-            Some(ctx.accounts.admin_state.key()),
-            Some(ctx.accounts.collection_mint.key()),
-        ) {
-            Ok(ix) => ix,
-            Err(_) => {
-                cleanup_collection_mint(&ctx)?;
-                return err!(ProgramErrorCode::CantInitializeMetadataPointer);
-            }
-        };
-
-    invoke(
-        &init_meta_data_pointer_ix,
-        &[
-            ctx.accounts.collection_mint.to_account_info(),
-            ctx.accounts.admin_state.to_account_info(),
-        ],
-    )?;
-
-    // Initialize the mint
-    let mint_cpi_ix = CpiContext::new(
-        ctx.accounts.token_program.to_account_info(),
-        token_2022::InitializeMint2 {
-            mint: ctx.accounts.collection_mint.to_account_info(),
-        },
-    );
-
-    token_2022::initialize_mint2(
-        mint_cpi_ix,
-        0,
-        &ctx.accounts.admin_state.key(),
-        Some(&ctx.accounts.admin_state.key()),
-    )?;
-
-    // We use a PDA as a mint authority for the metadata account
+    // Create metadata and master edition for the collection
     let seeds = b"admin_state";
     let bump = ctx.bumps.admin_state;
     let signer: &[&[&[u8]]] = &[&[seeds, &[bump]]];
 
-    let metadata = spl_token_metadata_interface::state::TokenMetadata {
+    // Create collection metadata
+    let create_metadata_ix = CreateMetadataAccountV3 {
+        metadata: ctx.accounts.metadata_account.key(),
+        mint: ctx.accounts.collection_mint.key(),
+        mint_authority: ctx.accounts.admin_state.key(),
+        update_authority: (ctx.accounts.admin_state.key(), true),
+        payer: ctx.accounts.signer.key(),
+        system_program: ctx.accounts.system_program.key(),
+        rent: Some(ctx.accounts.rent.key()),
+    };
+
+    let data = DataV2 {
         name: name.clone(),
         symbol: symbol.clone(),
         uri: uri.clone(),
-        ..Default::default()
+        seller_fee_basis_points: 0, // No royalties for collection NFTs
+        creators: Some(vec![Creator {
+            address: ctx.accounts.admin_state.key(),
+            verified: false,
+            share: 100,
+        }]),
+        collection: None, // Collections don't have parent collections
+        uses: None,
     };
 
-    // we need to add rent for TokenMetadata extension to reallocate space
-    let token_mint_data = ctx.accounts.collection_mint.try_borrow_data()?;
-    let token_mint_unpacked =
-        StateWithExtensions::<spl_token_2022::state::Mint>::unpack(&token_mint_data)?;
-    let new_account_len = token_mint_unpacked
-        .try_get_new_account_len_for_variable_len_extension::<spl_token_metadata_interface::state::TokenMetadata>(&metadata)?;
+    let args = mpl_token_metadata::instructions::CreateMetadataAccountV3InstructionArgs {
+        data,
+        is_mutable: true,
+        collection_details: Some(mpl_token_metadata::types::CollectionDetails::V1 { size: 0 }), // Start with 0 items
+    };
 
-    let new_rent_exempt_minimum = Rent::get()?.minimum_balance(new_account_len);
-    let additional_rent = new_rent_exempt_minimum.saturating_sub(ctx.accounts.collection_mint.lamports());
-    drop(token_mint_data); // CPI call will borrow the account data
+    let ix = create_metadata_ix.instruction(args);
 
-    msg!(
-        "Init collection metadata {0}",
-        ctx.accounts.admin_state.to_account_info().key
-    );
-
-    // transfer additional rent
-    invoke(
-        &anchor_lang::solana_program::system_instruction::transfer(
-            ctx.accounts.signer.key,
-            ctx.accounts.collection_mint.key,
-            additional_rent,
-        ),
+    invoke_signed(
+        &ix,
         &[
-            ctx.accounts.signer.to_account_info(),
+            ctx.accounts.metadata_account.to_account_info(),
             ctx.accounts.collection_mint.to_account_info(),
+            ctx.accounts.admin_state.to_account_info(),
+            ctx.accounts.signer.to_account_info(),
             ctx.accounts.system_program.to_account_info(),
+            ctx.accounts.rent.to_account_info(),
         ],
+        signer,
     )?;
 
-    // initialize TokenMetadata extension
+    // Create master edition for the collection
+    let create_master_edition_ix = CreateMasterEditionV3 {
+        edition: ctx.accounts.master_edition_account.key(),
+        mint: ctx.accounts.collection_mint.key(),
+        update_authority: ctx.accounts.admin_state.key(),
+        mint_authority: ctx.accounts.admin_state.key(),
+        payer: ctx.accounts.signer.key(),
+        metadata: ctx.accounts.metadata_account.key(),
+        token_program: ctx.accounts.token_program.key(),
+        system_program: ctx.accounts.system_program.key(),
+        rent: Some(ctx.accounts.rent.key()),
+    };
+
+    let master_edition_args = mpl_token_metadata::instructions::CreateMasterEditionV3InstructionArgs {
+        max_supply: Some(0), // Unlimited supply for collection items
+    };
+
+    let master_edition_ix = create_master_edition_ix.instruction(master_edition_args);
+
     invoke_signed(
-        &spl_token_metadata_interface::instruction::initialize(
-            ctx.accounts.token_program.key,
-            ctx.accounts.collection_mint.key,
-            ctx.accounts.admin_state.to_account_info().key,
-            ctx.accounts.collection_mint.key,
-            &ctx.accounts.admin_state.to_account_info().key(),
-            metadata.name,
-            metadata.symbol,
-            metadata.uri,
-        ),
+        &master_edition_ix,
         &[
+            ctx.accounts.master_edition_account.to_account_info(),
             ctx.accounts.collection_mint.to_account_info(),
             ctx.accounts.admin_state.to_account_info(),
             ctx.accounts.admin_state.to_account_info(),
+            ctx.accounts.signer.to_account_info(),
+            ctx.accounts.metadata_account.to_account_info(),
             ctx.accounts.token_program.to_account_info(),
+            ctx.accounts.system_program.to_account_info(),
+            ctx.accounts.rent.to_account_info(),
         ],
         signer,
     )?;
@@ -211,31 +182,6 @@ pub fn handler(ctx: Context<CreateCollectionNft>, name: String, symbol: String, 
         uri,
         timestamp: clock.unix_timestamp,
     });
-
-    Ok(())
-}
-
-fn cleanup_collection_mint(ctx: &Context<CreateCollectionNft>) -> Result<()> {
-    let seeds = b"admin_state";
-    let bump = ctx.bumps.admin_state;
-    let signer: &[&[&[u8]]] = &[&[seeds, &[bump]]];
-
-    invoke_signed(
-        &spl_token_2022::instruction::close_account(
-            ctx.accounts.token_program.key,
-            ctx.accounts.collection_mint.key,
-            ctx.accounts.signer.key,          // lamports go back to user
-            &ctx.accounts.admin_state.key(),  // close authority
-            &[],
-        )?,
-        &[
-            ctx.accounts.token_program.to_account_info(),
-            ctx.accounts.collection_mint.to_account_info(),
-            ctx.accounts.signer.to_account_info(),
-            ctx.accounts.admin_state.to_account_info(),
-        ],
-        signer,
-    )?;
 
     Ok(())
 }

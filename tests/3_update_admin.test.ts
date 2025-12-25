@@ -185,6 +185,102 @@ describe("update_admin", () => {
       );
       console.log("✓ Purchase started set to false");
     });
+
+    it("should update OG collection address", async () => {
+      const newOgCollection = Keypair.generate().publicKey;
+
+      const tx = await ctx.program.methods
+        .updateOgCollection(newOgCollection)
+        .accounts({
+          superAdmin: ctx.superAdmin.publicKey,
+        })
+        .rpc({ skipPreflight: true });
+
+      await ctx.provider.connection.confirmTransaction(tx, "confirmed");
+
+      const state = await ctx.fetchAdminState();
+      assert.strictEqual(
+        state.ogCollection.toBase58(),
+        newOgCollection.toBase58(),
+        "OG collection should be updated"
+      );
+      console.log("✓ OG collection updated to:", state.ogCollection.toBase58());
+
+      // Restore to default for other tests
+      await ctx.program.methods
+        .updateOgCollection(ctx.ogCollectionMint || newOgCollection)
+        .accounts({
+          superAdmin: ctx.superAdmin.publicKey,
+        })
+        .rpc({ skipPreflight: true });
+    });
+
+    it("should update Dongle Proof collection address", async () => {
+      const newDongleProofCollection = Keypair.generate().publicKey;
+
+      const tx = await ctx.program.methods
+        .updateDongleProofCollection(newDongleProofCollection)
+        .accounts({
+          superAdmin: ctx.superAdmin.publicKey,
+        })
+        .rpc({ skipPreflight: true });
+
+      await ctx.provider.connection.confirmTransaction(tx, "confirmed");
+
+      const state = await ctx.fetchAdminState();
+      assert.strictEqual(
+        state.dongleProofCollection.toBase58(),
+        newDongleProofCollection.toBase58(),
+        "Dongle Proof collection should be updated"
+      );
+      console.log("✓ Dongle Proof collection updated to:", state.dongleProofCollection.toBase58());
+
+      // Restore to default for other tests
+      await ctx.program.methods
+        .updateDongleProofCollection(ctx.dongleProofCollectionMint || newDongleProofCollection)
+        .accounts({
+          superAdmin: ctx.superAdmin.publicKey,
+        })
+        .rpc({ skipPreflight: true });
+    });
+
+    it("should fail to update OG collection with default address", async () => {
+      const defaultCollection = new anchor.web3.PublicKey("11111111111111111111111111111111"); // Default pubkey
+
+      let errorThrown = false;
+      try {
+        await ctx.program.methods
+          .updateOgCollection(defaultCollection)
+          .accounts({
+            superAdmin: ctx.superAdmin.publicKey,
+          })
+          .rpc({ skipPreflight: true });
+      } catch (err: any) {
+        errorThrown = true;
+        console.log("✓ Correctly rejected default OG collection address");
+      }
+
+      assert.ok(errorThrown, "Should have rejected default OG collection address");
+    });
+
+    it("should fail to update Dongle Proof collection with default address", async () => {
+      const defaultCollection = new anchor.web3.PublicKey("11111111111111111111111111111111"); // Default pubkey
+
+      let errorThrown = false;
+      try {
+        await ctx.program.methods
+          .updateDongleProofCollection(defaultCollection)
+          .accounts({
+            superAdmin: ctx.superAdmin.publicKey,
+          })
+          .rpc({ skipPreflight: true });
+      } catch (err: any) {
+        errorThrown = true;
+        console.log("✓ Correctly rejected default Dongle Proof collection address");
+      }
+
+      assert.ok(errorThrown, "Should have rejected default Dongle Proof collection address");
+    });
   });
 
   describe("Failure Cases", () => {
@@ -196,6 +292,7 @@ describe("update_admin", () => {
       );
       await ctx.provider.connection.confirmTransaction(sig, "confirmed");
 
+      // Test unauthorized mint fee update
       let errorThrown = false;
       try {
         await ctx.program.methods
@@ -207,10 +304,44 @@ describe("update_admin", () => {
           .rpc({ skipPreflight: true });
       } catch (err: any) {
         errorThrown = true;
-        console.log("✓ Correctly rejected unauthorized admin update");
+        console.log("✓ Correctly rejected unauthorized mint fee update");
       }
 
-      assert.ok(errorThrown, "Should have rejected unauthorized update");
+      assert.ok(errorThrown, "Should have rejected unauthorized mint fee update");
+
+      // Test unauthorized OG collection update
+      errorThrown = false;
+      try {
+        await ctx.program.methods
+          .updateOgCollection(Keypair.generate().publicKey)
+          .accounts({
+            superAdmin: randomUser.publicKey,
+          })
+          .signers([randomUser])
+          .rpc({ skipPreflight: true });
+      } catch (err: any) {
+        errorThrown = true;
+        console.log("✓ Correctly rejected unauthorized OG collection update");
+      }
+
+      assert.ok(errorThrown, "Should have rejected unauthorized OG collection update");
+
+      // Test unauthorized Dongle Proof collection update
+      errorThrown = false;
+      try {
+        await ctx.program.methods
+          .updateDongleProofCollection(Keypair.generate().publicKey)
+          .accounts({
+            superAdmin: randomUser.publicKey,
+          })
+          .signers([randomUser])
+          .rpc({ skipPreflight: true });
+      } catch (err: any) {
+        errorThrown = true;
+        console.log("✓ Correctly rejected unauthorized Dongle Proof collection update");
+      }
+
+      assert.ok(errorThrown, "Should have rejected unauthorized Dongle Proof collection update");
     });
   });
 });

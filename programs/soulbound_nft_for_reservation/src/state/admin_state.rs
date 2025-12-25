@@ -15,6 +15,10 @@ pub struct AdminState {
     pub dongle_price_nft_holder: u64, // dongle price for soulbound NFT holders (e.g., 100 USDC)
     pub dongle_price_normal: u64, // dongle price for normal users without NFT (e.g., 499 USDC)
     pub purchase_started: bool, // flag to enable/disable dongle purchases
+
+    // NFT Collections
+    pub og_collection: Pubkey, // OG NFT collection for early adopters (transferable)
+    pub dongle_proof_collection: Pubkey, // Dongle proof NFT collection (transferable)
 }
 
 impl AdminState {
@@ -30,6 +34,8 @@ impl AdminState {
         8 +         // mint_start_date
         8 +         // dongle_price_nft_holder
         8 +         // dongle_price_normal
-        1           // purchase_started
+        1 +         // purchase_started
+        32 +        // og_collection
+        32          // dongle_proof_collection
     }
 }
