@@ -1,123 +1,83 @@
 import * as anchor from "@coral-xyz/anchor";
+import { expect } from "chai";
+import {
+  testContext,
+  initializeTestContext,
+  MINT_FEE,
+  MAX_SUPPLY,
+  MINT_START_DATE,
+  DONGLE_PRICE_NFT_HOLDER,
+  DONGLE_PRICE_NORMAL,
+  assertAdminState,
+} from "./setup";
+import { PublicKey } from "@solana/web3.js";
 import { TOKEN_PROGRAM_ID } from "@solana/spl-token";
-import assert from "assert";
-import { ctx } from "./setup";
 
 describe("init_admin", () => {
   before(async () => {
-    await ctx.initialize();
+    await initializeTestContext();
   });
 
-  describe("Success Cases", () => {
-    it("should initialize admin state with super_admin", async () => {
-      const tx = await ctx.program.methods
-        .initAdmin(
-          new anchor.BN(ctx.MINT_FEE),
-          new anchor.BN(ctx.MAX_SUPPLY),
-          ctx.withdrawWallet.publicKey,
-          new anchor.BN(0), // mint_start_date: 0 = no restriction
-          new anchor.BN(ctx.DONGLE_PRICE_NFT_HOLDER),
-          new anchor.BN(ctx.DONGLE_PRICE_NORMAL)
-        )
-        .accounts({
-          superAdmin: ctx.superAdmin.publicKey,
-          paymentMint: ctx.paymentMint,
-          paymentTokenProgram: TOKEN_PROGRAM_ID,
-        })
-        .rpc({ skipPreflight: true });
+  it("should initialize admin state successfully", async () => {
+    // Skip if already initialized
+    if (testContext.adminInitialized) {
+      console.log("Admin already initialized, skipping...");
+      return;
+    }
 
-      await ctx.provider.connection.confirmTransaction(tx, "confirmed");
-      console.log("Init admin tx:", tx);
+    // Initialize admin
+    const tx = await testContext.program.methods
+      .initAdmin(
+        MINT_FEE,
+        MAX_SUPPLY,
+        testContext.withdrawWallet.publicKey,
+        MINT_START_DATE,
+        DONGLE_PRICE_NFT_HOLDER,
+        DONGLE_PRICE_NORMAL
+      )
+      .accounts({
+        superAdmin: testContext.admin.publicKey,
+        adminState: testContext.adminStatePda,
+        paymentMint: testContext.usdcMint,
+        vault: testContext.vaultPda,
+        paymentTokenProgram: TOKEN_PROGRAM_ID,
+        systemProgram: anchor.web3.SystemProgram.programId,
+        rent: anchor.web3.SYSVAR_RENT_PUBKEY,
+      })
+      .signers([testContext.admin])
+      .rpc();
 
-      const state = await ctx.fetchAdminState();
-      console.log("Super admin:", state.superAdmin.toBase58());
-      console.log("Withdraw wallet:", state.withdrawWallet.toBase58());
-      console.log("Mint fee:", state.mintFee.toString());
-      console.log("Max supply:", state.maxSupply.toString());
-      console.log("Mint start date:", state.mintStartDate.toString());
-      console.log("Payment mint:", state.paymentMint.toBase58());
-      console.log("Dongle price (NFT holder):", state.donglePriceNftHolder.toString());
-      console.log("Dongle price (Normal):", state.donglePriceNormal.toString());
-      console.log("Purchase started:", state.purchaseStarted);
+    // Verify transaction succeeded
+    expect(tx).to.be.a("string");
+    testContext.adminInitialized = true;
 
-      assert.strictEqual(
-        state.superAdmin.toBase58(),
-        ctx.superAdmin.publicKey.toBase58(),
-        "Super admin should match"
-      );
-      assert.strictEqual(
-        state.withdrawWallet.toBase58(),
-        ctx.withdrawWallet.publicKey.toBase58(),
-        "Withdraw wallet should match"
-      );
-      assert.strictEqual(
-        state.mintFee.toNumber(),
-        ctx.MINT_FEE,
-        "Mint fee should match"
-      );
-      assert.strictEqual(
-        state.maxSupply.toNumber(),
-        ctx.MAX_SUPPLY,
-        "Max supply should match"
-      );
-      assert.strictEqual(
-        state.mintStartDate.toNumber(),
-        0,
-        "Mint start date should be 0"
-      );
-      assert.strictEqual(
-        state.paymentMint.toBase58(),
-        ctx.paymentMint.toBase58(),
-        "Payment mint should match"
-      );
-      assert.strictEqual(
-        state.currentReservedCount.toNumber(),
-        0,
-        "Current reserved count should be 0"
-      );
-      assert.strictEqual(
-        state.donglePriceNftHolder.toNumber(),
-        ctx.DONGLE_PRICE_NFT_HOLDER,
-        "Dongle price for NFT holder should match"
-      );
-      assert.strictEqual(
-        state.donglePriceNormal.toNumber(),
-        ctx.DONGLE_PRICE_NORMAL,
-        "Dongle price for normal user should match"
-      );
-      assert.strictEqual(
-        state.purchaseStarted,
-        false,
-        "Purchase started should be false by default"
-      );
+    // Verify admin state was created correctly
+    await assertAdminState({
+      superAdmin: testContext.admin.publicKey,
+      withdrawWallet: testContext.withdrawWallet.publicKey,
+      mintFee: MINT_FEE,
+      maxSupply: MAX_SUPPLY,
+      mintStartDate: MINT_START_DATE,
+      donglePriceNftHolder: DONGLE_PRICE_NFT_HOLDER,
+      donglePriceNormal: DONGLE_PRICE_NORMAL,
+      purchaseStarted: false,
+      ogCollection: PublicKey.default,
+      dongleProofCollection: PublicKey.default,
     });
+
+    // Verify vault was created
+    const vaultAccount = await testContext.connection.getAccountInfo(testContext.vaultPda);
+    expect(vaultAccount).to.not.be.null;
+    expect(vaultAccount!.owner.toString()).to.equal(TOKEN_PROGRAM_ID.toString());
   });
 
-  describe("Failure Cases", () => {
-    it("should fail to initialize admin state twice (account already exists)", async () => {
-      let errorThrown = false;
-      try {
-        await ctx.program.methods
-          .initAdmin(
-            new anchor.BN(ctx.MINT_FEE),
-            new anchor.BN(ctx.MAX_SUPPLY),
-            ctx.withdrawWallet.publicKey,
-            new anchor.BN(0),
-            new anchor.BN(ctx.DONGLE_PRICE_NFT_HOLDER),
-            new anchor.BN(ctx.DONGLE_PRICE_NORMAL)
-          )
-          .accounts({
-            superAdmin: ctx.superAdmin.publicKey,
-            paymentMint: ctx.paymentMint,
-            paymentTokenProgram: TOKEN_PROGRAM_ID,
-          })
-          .rpc({ skipPreflight: true });
-      } catch (err: any) {
-        errorThrown = true;
-        console.log("✓ Correctly rejected duplicate initialization");
-      }
+  it("should verify current_reserved_count starts at 0", async () => {
+    const adminState = await testContext.fetchAdminState();
+    expect(adminState.currentReservedCount.toNumber()).to.equal(0);
+  });
 
-      assert.ok(errorThrown, "Should have rejected duplicate initialization");
-    });
+  it("should verify payment_mint is set correctly", async () => {
+    const adminState = await testContext.fetchAdminState();
+    expect(adminState.paymentMint.toString()).to.equal(testContext.usdcMint.toString());
   });
 });

@@ -1,347 +1,405 @@
 import * as anchor from "@coral-xyz/anchor";
-import { Keypair } from "@solana/web3.js";
-import assert from "assert";
-import { ctx } from "./setup";
+import { expect } from "chai";
+import { testContext, initializeTestContext, assertAdminState, MINT_FEE, MAX_SUPPLY, MINT_START_DATE, DONGLE_PRICE_NFT_HOLDER, DONGLE_PRICE_NORMAL } from "./setup";
+import { Keypair, PublicKey } from "@solana/web3.js";
+import { TOKEN_PROGRAM_ID } from "@solana/spl-token";
 
 describe("update_admin", () => {
   before(async () => {
-    await ctx.initialize();
+    await initializeTestContext();
+    
+    // Initialize admin if not already done
+    if (!testContext.adminInitialized) {
+      await testContext.program.methods
+        .initAdmin(
+          MINT_FEE,
+          MAX_SUPPLY,
+          testContext.withdrawWallet.publicKey,
+          MINT_START_DATE,
+          DONGLE_PRICE_NFT_HOLDER,
+          DONGLE_PRICE_NORMAL
+        )
+        .accounts({
+          superAdmin: testContext.admin.publicKey,
+          adminState: testContext.adminStatePda,
+          paymentMint: testContext.usdcMint,
+          vault: testContext.vaultPda,
+          paymentTokenProgram: TOKEN_PROGRAM_ID,
+          systemProgram: anchor.web3.SystemProgram.programId,
+          rent: anchor.web3.SYSVAR_RENT_PUBKEY,
+        })
+        .signers([testContext.admin])
+        .rpc();
+      testContext.adminInitialized = true;
+    }
   });
 
-  describe("Success Cases", () => {
-    it("should update mint_fee", async () => {
-      const newMintFee = ctx.MINT_FEE * 2;
+  describe("update_mint_fee", () => {
+    it("should update mint fee successfully", async () => {
+      const newMintFee = new anchor.BN(2000000); // 2 USDC
 
-      const tx = await ctx.program.methods
-        .updateMintFee(new anchor.BN(newMintFee))
+      const tx = await testContext.program.methods
+        .updateMintFee(newMintFee)
         .accounts({
-          superAdmin: ctx.superAdmin.publicKey,
+          superAdmin: testContext.admin.publicKey,
+          adminState: testContext.adminStatePda,
         })
-        .rpc({ skipPreflight: true });
+        .signers([testContext.admin])
+        .rpc();
 
-      await ctx.provider.connection.confirmTransaction(tx, "confirmed");
-      console.log("Update mint_fee tx:", tx);
-
-      const state = await ctx.fetchAdminState();
-      assert.strictEqual(
-        state.mintFee.toNumber(),
-        newMintFee,
-        "Mint fee should be updated"
-      );
-      console.log("✓ Mint fee updated to:", state.mintFee.toString());
+      expect(tx).to.be.a("string");
+      await assertAdminState({ mintFee: newMintFee });
     });
 
-    it("should update max_supply", async () => {
-      const newMaxSupply = 200;
+    it("should fail with invalid mint fee (zero)", async () => {
+      const invalidMintFee = new anchor.BN(0);
 
-      const tx = await ctx.program.methods
-        .updateMaxSupply(new anchor.BN(newMaxSupply))
-        .accounts({
-          superAdmin: ctx.superAdmin.publicKey,
-        })
-        .rpc({ skipPreflight: true });
+      try {
+        await testContext.program.methods
+          .updateMintFee(invalidMintFee)
+          .accounts({
+            superAdmin: testContext.admin.publicKey,
+            adminState: testContext.adminStatePda,
+          })
+          .signers([testContext.admin])
+          .rpc();
 
-      await ctx.provider.connection.confirmTransaction(tx, "confirmed");
-
-      const state = await ctx.fetchAdminState();
-      assert.strictEqual(
-        state.maxSupply.toNumber(),
-        newMaxSupply,
-        "Max supply should be updated"
-      );
-      console.log("✓ Max supply updated to:", state.maxSupply.toString());
-
-      // Restore original values
-      await ctx.program.methods
-        .updateMaxSupply(new anchor.BN(ctx.MAX_SUPPLY))
-        .accounts({
-          superAdmin: ctx.superAdmin.publicKey,
-        })
-        .rpc({ skipPreflight: true });
+        expect.fail("Expected transaction to fail with invalid mint fee");
+      } catch (error: any) {
+        expect(error.toString()).to.include("InvalidMintFee");
+      }
     });
 
-    it("should update mint_start_date", async () => {
-      const futureTimestamp = Math.floor(Date.now() / 1000) + 3600;
+    it("should fail when non-admin tries to update mint fee", async () => {
+      const newMintFee = new anchor.BN(3000000);
 
-      const tx = await ctx.program.methods
-        .updateMintStartDate(new anchor.BN(futureTimestamp))
+      try {
+        await testContext.program.methods
+          .updateMintFee(newMintFee)
+          .accounts({
+            superAdmin: testContext.user1.keypair.publicKey, // Non-admin
+            adminState: testContext.adminStatePda,
+          })
+          .signers([testContext.user1.keypair])
+          .rpc();
+
+        expect.fail("Expected transaction to fail with non-admin signer");
+      } catch (error: any) {
+        expect(error.toString()).to.include("Unauthorized");
+      }
+    });
+  });
+
+  describe("update_max_supply", () => {
+    it("should update max supply successfully", async () => {
+      const newMaxSupply = new anchor.BN(2000);
+
+      const tx = await testContext.program.methods
+        .updateMaxSupply(newMaxSupply)
         .accounts({
-          superAdmin: ctx.superAdmin.publicKey,
+          superAdmin: testContext.admin.publicKey,
+          adminState: testContext.adminStatePda,
         })
-        .rpc({ skipPreflight: true });
+        .signers([testContext.admin])
+        .rpc();
 
-      await ctx.provider.connection.confirmTransaction(tx, "confirmed");
-
-      const state = await ctx.fetchAdminState();
-      assert.strictEqual(
-        state.mintStartDate.toNumber(),
-        futureTimestamp,
-        "Mint start date should be updated"
-      );
-      console.log(
-        "✓ Mint start date updated to:",
-        new Date(state.mintStartDate.toNumber() * 1000).toISOString()
-      );
-
-      // Reset to 0 for subsequent tests
-      await ctx.program.methods
-        .updateMintStartDate(new anchor.BN(0))
-        .accounts({
-          superAdmin: ctx.superAdmin.publicKey,
-        })
-        .rpc({ skipPreflight: true });
+      expect(tx).to.be.a("string");
+      await assertAdminState({ maxSupply: newMaxSupply });
     });
 
-    it("should update dongle price for NFT holders", async () => {
-      const newDonglePriceNftHolder = 50_000_000; // 50 USDC
+    it("should update max supply to unlimited (zero)", async () => {
+      const newMaxSupply = new anchor.BN(0); // Unlimited
 
-      const tx = await ctx.program.methods
-        .updateDonglePriceNftHolder(new anchor.BN(newDonglePriceNftHolder))
+      const tx = await testContext.program.methods
+        .updateMaxSupply(newMaxSupply)
         .accounts({
-          superAdmin: ctx.superAdmin.publicKey,
+          superAdmin: testContext.admin.publicKey,
+          adminState: testContext.adminStatePda,
         })
-        .rpc({ skipPreflight: true });
+        .signers([testContext.admin])
+        .rpc();
 
-      await ctx.provider.connection.confirmTransaction(tx, "confirmed");
+      expect(tx).to.be.a("string");
+      await assertAdminState({ maxSupply: newMaxSupply });
+    });
+  });
 
-      const state = await ctx.fetchAdminState();
-      assert.strictEqual(
-        state.donglePriceNftHolder.toNumber(),
-        newDonglePriceNftHolder,
-        "Dongle price for NFT holder should be updated"
-      );
-      console.log("✓ Dongle price for NFT holders updated to:", newDonglePriceNftHolder);
+  describe("update_mint_start_date", () => {
+    it("should update mint start date successfully", async () => {
+      const newMintStartDate = new anchor.BN(Math.floor(Date.now() / 1000) + 86400); // Tomorrow
 
-      // Restore original value
-      await ctx.program.methods
-        .updateDonglePriceNftHolder(new anchor.BN(ctx.DONGLE_PRICE_NFT_HOLDER))
+      const tx = await testContext.program.methods
+        .updateMintStartDate(newMintStartDate)
         .accounts({
-          superAdmin: ctx.superAdmin.publicKey,
+          superAdmin: testContext.admin.publicKey,
+          adminState: testContext.adminStatePda,
         })
-        .rpc({ skipPreflight: true });
+        .signers([testContext.admin])
+        .rpc();
+
+      expect(tx).to.be.a("string");
+      await assertAdminState({ mintStartDate: newMintStartDate });
     });
 
-    it("should update dongle price for normal users", async () => {
-      const newDonglePriceNormal = 250_000_000; // 250 USDC
+    it("should allow setting mint start date to zero (no restriction)", async () => {
+      const newMintStartDate = new anchor.BN(0); // No restriction
 
-      const tx = await ctx.program.methods
-        .updateDonglePriceNormal(new anchor.BN(newDonglePriceNormal))
+      const tx = await testContext.program.methods
+        .updateMintStartDate(newMintStartDate)
         .accounts({
-          superAdmin: ctx.superAdmin.publicKey,
+          superAdmin: testContext.admin.publicKey,
+          adminState: testContext.adminStatePda,
         })
-        .rpc({ skipPreflight: true });
+        .signers([testContext.admin])
+        .rpc();
 
-      await ctx.provider.connection.confirmTransaction(tx, "confirmed");
+      expect(tx).to.be.a("string");
+      await assertAdminState({ mintStartDate: newMintStartDate });
+    });
+  });
 
-      const state = await ctx.fetchAdminState();
-      assert.strictEqual(
-        state.donglePriceNormal.toNumber(),
-        newDonglePriceNormal,
-        "Dongle price for normal user should be updated"
-      );
-      console.log("✓ Dongle price for normal users updated to:", newDonglePriceNormal);
+  describe("update_dongle_price_nft_holder", () => {
+    it("should update dongle price for NFT holders successfully", async () => {
+      const newPrice = new anchor.BN(200000000); // 200 USDC
 
-      // Restore original value
-      await ctx.program.methods
-        .updateDonglePriceNormal(new anchor.BN(ctx.DONGLE_PRICE_NORMAL))
+      const tx = await testContext.program.methods
+        .updateDonglePriceNftHolder(newPrice)
         .accounts({
-          superAdmin: ctx.superAdmin.publicKey,
+          superAdmin: testContext.admin.publicKey,
+          adminState: testContext.adminStatePda,
         })
-        .rpc({ skipPreflight: true });
+        .signers([testContext.admin])
+        .rpc();
+
+      expect(tx).to.be.a("string");
+      await assertAdminState({ donglePriceNftHolder: newPrice });
     });
 
-    it("should update purchase_started flag", async () => {
-      // Enable purchase
-      const tx = await ctx.program.methods
+    it("should fail with invalid dongle price for NFT holders (zero)", async () => {
+      const invalidPrice = new anchor.BN(0);
+
+      try {
+        await testContext.program.methods
+          .updateDonglePriceNftHolder(invalidPrice)
+          .accounts({
+            superAdmin: testContext.admin.publicKey,
+            adminState: testContext.adminStatePda,
+          })
+          .signers([testContext.admin])
+          .rpc();
+
+        expect.fail("Expected transaction to fail with invalid dongle price");
+      } catch (error: any) {
+        expect(error.toString()).to.include("InvalidDonglePrice");
+      }
+    });
+  });
+
+  describe("update_dongle_price_normal", () => {
+    it("should update dongle price for normal users successfully", async () => {
+      const newPrice = new anchor.BN(600000000); // 600 USDC
+
+      const tx = await testContext.program.methods
+        .updateDonglePriceNormal(newPrice)
+        .accounts({
+          superAdmin: testContext.admin.publicKey,
+          adminState: testContext.adminStatePda,
+        })
+        .signers([testContext.admin])
+        .rpc();
+
+      expect(tx).to.be.a("string");
+      await assertAdminState({ donglePriceNormal: newPrice });
+    });
+
+    it("should fail with invalid dongle price for normal users (zero)", async () => {
+      const invalidPrice = new anchor.BN(0);
+
+      try {
+        await testContext.program.methods
+          .updateDonglePriceNormal(invalidPrice)
+          .accounts({
+            superAdmin: testContext.admin.publicKey,
+            adminState: testContext.adminStatePda,
+          })
+          .signers([testContext.admin])
+          .rpc();
+
+        expect.fail("Expected transaction to fail with invalid dongle price");
+      } catch (error: any) {
+        expect(error.toString()).to.include("InvalidDonglePrice");
+      }
+    });
+  });
+
+  describe("update_purchase_started", () => {
+    it("should enable purchase started flag", async () => {
+      const tx = await testContext.program.methods
         .updatePurchaseStarted(true)
         .accounts({
-          superAdmin: ctx.superAdmin.publicKey,
+          superAdmin: testContext.admin.publicKey,
+          adminState: testContext.adminStatePda,
         })
-        .rpc({ skipPreflight: true });
+        .signers([testContext.admin])
+        .rpc();
 
-      await ctx.provider.connection.confirmTransaction(tx, "confirmed");
+      expect(tx).to.be.a("string");
+      await assertAdminState({ purchaseStarted: true });
+    });
 
-      let state = await ctx.fetchAdminState();
-      assert.strictEqual(
-        state.purchaseStarted,
-        true,
-        "Purchase started should be true"
-      );
-      console.log("✓ Purchase started set to true");
-
-      // Disable purchase
-      await ctx.program.methods
+    it("should disable purchase started flag", async () => {
+      const tx = await testContext.program.methods
         .updatePurchaseStarted(false)
         .accounts({
-          superAdmin: ctx.superAdmin.publicKey,
+          superAdmin: testContext.admin.publicKey,
+          adminState: testContext.adminStatePda,
         })
-        .rpc({ skipPreflight: true });
+        .signers([testContext.admin])
+        .rpc();
 
-      state = await ctx.fetchAdminState();
-      assert.strictEqual(
-        state.purchaseStarted,
-        false,
-        "Purchase started should be false"
-      );
-      console.log("✓ Purchase started set to false");
-    });
-
-    it("should update OG collection address", async () => {
-      const newOgCollection = Keypair.generate().publicKey;
-
-      const tx = await ctx.program.methods
-        .updateOgCollection(newOgCollection)
-        .accounts({
-          superAdmin: ctx.superAdmin.publicKey,
-        })
-        .rpc({ skipPreflight: true });
-
-      await ctx.provider.connection.confirmTransaction(tx, "confirmed");
-
-      const state = await ctx.fetchAdminState();
-      assert.strictEqual(
-        state.ogCollection.toBase58(),
-        newOgCollection.toBase58(),
-        "OG collection should be updated"
-      );
-      console.log("✓ OG collection updated to:", state.ogCollection.toBase58());
-
-      // Restore to default for other tests
-      await ctx.program.methods
-        .updateOgCollection(ctx.ogCollectionMint || newOgCollection)
-        .accounts({
-          superAdmin: ctx.superAdmin.publicKey,
-        })
-        .rpc({ skipPreflight: true });
-    });
-
-    it("should update Dongle Proof collection address", async () => {
-      const newDongleProofCollection = Keypair.generate().publicKey;
-
-      const tx = await ctx.program.methods
-        .updateDongleProofCollection(newDongleProofCollection)
-        .accounts({
-          superAdmin: ctx.superAdmin.publicKey,
-        })
-        .rpc({ skipPreflight: true });
-
-      await ctx.provider.connection.confirmTransaction(tx, "confirmed");
-
-      const state = await ctx.fetchAdminState();
-      assert.strictEqual(
-        state.dongleProofCollection.toBase58(),
-        newDongleProofCollection.toBase58(),
-        "Dongle Proof collection should be updated"
-      );
-      console.log("✓ Dongle Proof collection updated to:", state.dongleProofCollection.toBase58());
-
-      // Restore to default for other tests
-      await ctx.program.methods
-        .updateDongleProofCollection(ctx.dongleProofCollectionMint || newDongleProofCollection)
-        .accounts({
-          superAdmin: ctx.superAdmin.publicKey,
-        })
-        .rpc({ skipPreflight: true });
-    });
-
-    it("should fail to update OG collection with default address", async () => {
-      const defaultCollection = new anchor.web3.PublicKey("11111111111111111111111111111111"); // Default pubkey
-
-      let errorThrown = false;
-      try {
-        await ctx.program.methods
-          .updateOgCollection(defaultCollection)
-          .accounts({
-            superAdmin: ctx.superAdmin.publicKey,
-          })
-          .rpc({ skipPreflight: true });
-      } catch (err: any) {
-        errorThrown = true;
-        console.log("✓ Correctly rejected default OG collection address");
-      }
-
-      assert.ok(errorThrown, "Should have rejected default OG collection address");
-    });
-
-    it("should fail to update Dongle Proof collection with default address", async () => {
-      const defaultCollection = new anchor.web3.PublicKey("11111111111111111111111111111111"); // Default pubkey
-
-      let errorThrown = false;
-      try {
-        await ctx.program.methods
-          .updateDongleProofCollection(defaultCollection)
-          .accounts({
-            superAdmin: ctx.superAdmin.publicKey,
-          })
-          .rpc({ skipPreflight: true });
-      } catch (err: any) {
-        errorThrown = true;
-        console.log("✓ Correctly rejected default Dongle Proof collection address");
-      }
-
-      assert.ok(errorThrown, "Should have rejected default Dongle Proof collection address");
+      expect(tx).to.be.a("string");
+      await assertAdminState({ purchaseStarted: false });
     });
   });
 
-  describe("Failure Cases", () => {
-    it("should fail when non-super_admin tries to update (Unauthorized)", async () => {
-      const randomUser = Keypair.generate();
-      const sig = await ctx.provider.connection.requestAirdrop(
-        randomUser.publicKey,
-        1e9
-      );
-      await ctx.provider.connection.confirmTransaction(sig, "confirmed");
+  describe("update_og_collection", () => {
+    it("should update OG collection successfully", async () => {
+      const newOgCollection = Keypair.generate().publicKey;
 
-      // Test unauthorized mint fee update
-      let errorThrown = false;
+      const tx = await testContext.program.methods
+        .updateOgCollection(newOgCollection)
+        .accounts({
+          superAdmin: testContext.admin.publicKey,
+          adminState: testContext.adminStatePda,
+        })
+        .signers([testContext.admin])
+        .rpc();
+
+      expect(tx).to.be.a("string");
+      await assertAdminState({ ogCollection: newOgCollection });
+    });
+
+    it("should fail with invalid OG collection (default pubkey)", async () => {
+      const invalidCollection = PublicKey.default;
+
       try {
-        await ctx.program.methods
-          .updateMintFee(new anchor.BN(ctx.MINT_FEE))
+        await testContext.program.methods
+          .updateOgCollection(invalidCollection)
           .accounts({
-            superAdmin: randomUser.publicKey,
+            superAdmin: testContext.admin.publicKey,
+            adminState: testContext.adminStatePda,
           })
-          .signers([randomUser])
-          .rpc({ skipPreflight: true });
-      } catch (err: any) {
-        errorThrown = true;
-        console.log("✓ Correctly rejected unauthorized mint fee update");
+          .signers([testContext.admin])
+          .rpc();
+
+        expect.fail("Expected transaction to fail with invalid collection");
+      } catch (error: any) {
+        expect(error.toString()).to.include("InvalidCollection");
       }
+    });
+  });
 
-      assert.ok(errorThrown, "Should have rejected unauthorized mint fee update");
+  describe("update_dongle_proof_collection", () => {
+    it("should update dongle proof collection successfully", async () => {
+      const newDongleProofCollection = Keypair.generate().publicKey;
 
-      // Test unauthorized OG collection update
-      errorThrown = false;
+      const tx = await testContext.program.methods
+        .updateDongleProofCollection(newDongleProofCollection)
+        .accounts({
+          superAdmin: testContext.admin.publicKey,
+          adminState: testContext.adminStatePda,
+        })
+        .signers([testContext.admin])
+        .rpc();
+
+      expect(tx).to.be.a("string");
+      await assertAdminState({ dongleProofCollection: newDongleProofCollection });
+    });
+
+    it("should fail with invalid dongle proof collection (default pubkey)", async () => {
+      const invalidCollection = PublicKey.default;
+
       try {
-        await ctx.program.methods
-          .updateOgCollection(Keypair.generate().publicKey)
+        await testContext.program.methods
+          .updateDongleProofCollection(invalidCollection)
           .accounts({
-            superAdmin: randomUser.publicKey,
+            superAdmin: testContext.admin.publicKey,
+            adminState: testContext.adminStatePda,
           })
-          .signers([randomUser])
-          .rpc({ skipPreflight: true });
-      } catch (err: any) {
-        errorThrown = true;
-        console.log("✓ Correctly rejected unauthorized OG collection update");
+          .signers([testContext.admin])
+          .rpc();
+
+        expect.fail("Expected transaction to fail with invalid collection");
+      } catch (error: any) {
+        expect(error.toString()).to.include("InvalidCollection");
       }
+    });
+  });
 
-      assert.ok(errorThrown, "Should have rejected unauthorized OG collection update");
+  describe("update_super_admin", () => {
+    it("should update super admin successfully", async () => {
+      const newSuperAdmin = testContext.user1.keypair.publicKey;
 
-      // Test unauthorized Dongle Proof collection update
-      errorThrown = false;
+      const tx = await testContext.program.methods
+        .updateSuperAdmin(newSuperAdmin)
+        .accounts({
+          superAdmin: testContext.admin.publicKey,
+          adminState: testContext.adminStatePda,
+        })
+        .signers([testContext.admin])
+        .rpc();
+
+      expect(tx).to.be.a("string");
+      await assertAdminState({ superAdmin: newSuperAdmin });
+
+      // Change it back for other tests
+      const tx2 = await testContext.program.methods
+        .updateSuperAdmin(testContext.admin.publicKey)
+        .accounts({
+          superAdmin: newSuperAdmin, // New admin signs
+          adminState: testContext.adminStatePda,
+        })
+        .signers([testContext.user1.keypair])
+        .rpc();
+
+      expect(tx2).to.be.a("string");
+      await assertAdminState({ superAdmin: testContext.admin.publicKey });
+    });
+
+    it("should fail with invalid super admin (default pubkey)", async () => {
+      const invalidSuperAdmin = PublicKey.default;
+
       try {
-        await ctx.program.methods
-          .updateDongleProofCollection(Keypair.generate().publicKey)
+        await testContext.program.methods
+          .updateSuperAdmin(invalidSuperAdmin)
           .accounts({
-            superAdmin: randomUser.publicKey,
+            superAdmin: testContext.admin.publicKey,
+            adminState: testContext.adminStatePda,
           })
-          .signers([randomUser])
-          .rpc({ skipPreflight: true });
-      } catch (err: any) {
-        errorThrown = true;
-        console.log("✓ Correctly rejected unauthorized Dongle Proof collection update");
-      }
+          .signers([testContext.admin])
+          .rpc();
 
-      assert.ok(errorThrown, "Should have rejected unauthorized Dongle Proof collection update");
+        expect.fail("Expected transaction to fail with invalid super admin");
+      } catch (error: any) {
+        expect(error.toString()).to.include("InvalidSuperAdmin");
+      }
+    });
+
+    it("should fail when trying to set same super admin", async () => {
+      try {
+        await testContext.program.methods
+          .updateSuperAdmin(testContext.admin.publicKey) // Same as current
+          .accounts({
+            superAdmin: testContext.admin.publicKey,
+            adminState: testContext.adminStatePda,
+          })
+          .signers([testContext.admin])
+          .rpc();
+
+        expect.fail("Expected transaction to fail with same super admin");
+      } catch (error: any) {
+        expect(error.toString()).to.include("SameSuperAdmin");
+      }
     });
   });
 });

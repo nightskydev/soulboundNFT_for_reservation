@@ -5,7 +5,7 @@ resolution = true
 skip-lint = false
 
 [programs.localnet]
-soulbound_nft_for_reservation = "FY9yewUB1mQnURB7jZzog52LnUideQ35Apfc5WSVe1zD"
+soulbound_nft_for_reservation = "7nwJWSLt65ZWBzBwSt9FTSF94phiafpj3NYzA7rm2Qb2"
 
 [registry]
 url = "https://api.apr.dev"
@@ -16,3 +16,8 @@ wallet = "~/.config/solana/id.json"
 
 [scripts]
 test = "yarn run ts-mocha -p ./tsconfig.json -t 1000000 tests/**/*.ts"
+
+# Load Metaplex Token Metadata program for local testing
+[[test.genesis]]
+address = "metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s"
+program = "program-dumps/mpl_token_metadata.so"

@@ -70,7 +70,7 @@ async function main() {
   }
   
   const idl = JSON.parse(fs.readFileSync(idlPath, "utf-8"));
-  const programId = new PublicKey("FY9yewUB1mQnURB7jZzog52LnUideQ35Apfc5WSVe1zD");
+  const programId = new PublicKey("7nwJWSLt65ZWBzBwSt9FTSF94phiafpj3NYzA7rm2Qb2");
   const program = new Program<SoulboundNftForReservation>(idl, provider);
 
   console.log("Program ID:", programId.toBase58());

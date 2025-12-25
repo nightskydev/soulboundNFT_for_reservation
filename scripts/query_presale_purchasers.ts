@@ -7,7 +7,7 @@ import * as path from "path";
 // ============================================================
 
 // Program ID for the soulbound NFT contract
-const PROGRAM_ID = new PublicKey("FY9yewUB1mQnURB7jZzog52LnUideQ35Apfc5WSVe1zD");
+const PROGRAM_ID = new PublicKey("7nwJWSLt65ZWBzBwSt9FTSF94phiafpj3NYzA7rm2Qb2");
 
 // Network to query (mainnet-beta, devnet, testnet)
 const NETWORK: "mainnet-beta" | "devnet" | "testnet" = "devnet";

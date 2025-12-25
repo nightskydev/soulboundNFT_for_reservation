@@ -3,293 +3,311 @@ import { Program } from "@coral-xyz/anchor";
 import { SoulboundNftForReservation } from "../target/types/soulbound_nft_for_reservation";
 import {
   TOKEN_PROGRAM_ID,
-  TOKEN_2022_PROGRAM_ID,
-  ASSOCIATED_TOKEN_PROGRAM_ID,
   createMint,
-  createAssociatedTokenAccount,
   mintTo,
-  getAssociatedTokenAddressSync,
+  getAccount,
+  getAssociatedTokenAddress,
+  createAssociatedTokenAccount,
 } from "@solana/spl-token";
-import { Keypair, PublicKey } from "@solana/web3.js";
+import {
+  PublicKey,
+  Keypair,
+  LAMPORTS_PER_SOL,
+} from "@solana/web3.js";
+import { expect } from "chai";
+import { BN } from "bn.js";
 
-// Shared test context - persists across all test files
-export class TestContext {
+// Test constants
+export const MINT_FEE = new BN(1000000); // 1 USDC (6 decimals)
+export const MAX_SUPPLY = new BN(1000);
+export const MINT_START_DATE = new BN(0); // No restriction for tests
+export const DONGLE_PRICE_NFT_HOLDER = new BN(100000000); // 100 USDC
+export const DONGLE_PRICE_NORMAL = new BN(499000000); // 499 USDC
+
+// Test users
+export interface TestUser {
+  keypair: Keypair;
+  tokenAccount: PublicKey;
+  usdcBalance: BN;
+}
+
+// Singleton test context to maintain state across tests
+class TestContext {
   private static instance: TestContext;
+  public program: Program<SoulboundNftForReservation>;
+  public provider: anchor.AnchorProvider;
+  public connection: anchor.web3.Connection;
+
+  // Admin and users
+  public admin: Keypair;
+  public user1: TestUser;
+  public user2: TestUser;
+
+  // Tokens
+  public usdcMint: PublicKey;
+  public adminUsdcAccount: PublicKey;
+
+  // PDAs
+  public adminStatePda: PublicKey;
+  public adminStateBump: number;
+  public vaultPda: PublicKey;
+  public vaultBump: number;
+
+  // Collections
+  public ogCollectionMint?: PublicKey;
+  public dongleProofCollectionMint?: PublicKey;
+
+  // Track if admin is initialized
+  public adminInitialized = false;
+  public withdrawWallet: Keypair;
+
+  // State tracking
   private initialized = false;
 
-  // Provider and program
-  provider: anchor.AnchorProvider;
-  program: Program<SoulboundNftForReservation>;
+  private constructor() {}
 
-  // Accounts
-  superAdmin: anchor.Wallet;
-  withdrawWallet: Keypair;
-  newWithdrawWallet: Keypair;
-  user: Keypair;
-  user2: Keypair; // Second user for testing
-  user3: Keypair; // Third user for collection NFT testing
-
-  // Admin and payment related
-  adminState: PublicKey;
-  paymentMint: PublicKey;
-  wrongPaymentMint: PublicKey; // For testing invalid payment mint
-  userTokenAccount: PublicKey;
-  user2TokenAccount: PublicKey;
-  user3TokenAccount: PublicKey;
-  withdrawWalletTokenAccount: PublicKey;
-  newWithdrawWalletTokenAccount: PublicKey;
-  vault: PublicKey;
-
-  // Track minted NFT for burn tests
-  mintedNftMint: PublicKey | null = null;
-  mintedNftTokenAccount: PublicKey | null = null;
-
-  // Collection related
-  ogCollectionMint: PublicKey | null = null;
-  dongleProofCollectionMint: PublicKey | null = null;
-  collectionNftMint: PublicKey | null = null;
-  collectionNftTokenAccount: PublicKey | null = null;
-
-  // Constants
-  readonly PAYMENT_DECIMALS = 6;
-  readonly MINT_FEE = 1_000_000; // 1 USDC
-  readonly MAX_SUPPLY = 100;
-  readonly DONGLE_PRICE_NFT_HOLDER = 100_000_000; // 100 USDC
-  readonly DONGLE_PRICE_NORMAL = 499_000_000; // 499 USDC
-
-  private constructor() {
-    this.provider = anchor.AnchorProvider.env();
-    anchor.setProvider(this.provider);
-
-    this.program = anchor.workspace
-      .SoulboundNftForReservation as Program<SoulboundNftForReservation>;
-
-    this.superAdmin = this.provider.wallet as anchor.Wallet;
-
-    // Create keypairs
-    this.withdrawWallet = Keypair.generate();
-    this.newWithdrawWallet = Keypair.generate();
-    this.user = Keypair.generate();
-    this.user2 = Keypair.generate();
-    this.user3 = Keypair.generate();
-  }
-
-  static getInstance(): TestContext {
+  public static getInstance(): TestContext {
     if (!TestContext.instance) {
       TestContext.instance = new TestContext();
     }
     return TestContext.instance;
   }
 
-  async initialize(): Promise<void> {
-    if (this.initialized) {
-      return;
-    }
+  public async initialize(): Promise<void> {
+    if (this.initialized) return;
 
-    console.log("\n=== Setting up Test Context ===\n");
+    // Set up Anchor provider
+    this.provider = anchor.AnchorProvider.env();
+    anchor.setProvider(this.provider);
+    this.connection = this.provider.connection;
 
-    // Create mock USDC mint
-    this.paymentMint = await createMint(
-      this.provider.connection,
-      this.superAdmin.payer,
-      this.superAdmin.publicKey,
-      null,
-      this.PAYMENT_DECIMALS,
+    // Load the program
+    this.program = anchor.workspace.SoulboundNftForReservation as Program<SoulboundNftForReservation>;
+
+    // Create admin keypair
+    this.admin = Keypair.generate();
+    this.withdrawWallet = Keypair.generate();
+
+    // Airdrop SOL to admin
+    await this.airdropSol(this.admin.publicKey, 10);
+
+    // Create USDC mint first
+    this.usdcMint = await createMint(
+      this.connection,
+      this.admin,
+      this.admin.publicKey,
+      this.admin.publicKey,
+      6, // 6 decimals like USDC
       undefined,
       undefined,
       TOKEN_PROGRAM_ID
     );
-    console.log("Payment mint:", this.paymentMint.toBase58());
 
-    // Create wrong payment mint for testing
-    this.wrongPaymentMint = await createMint(
-      this.provider.connection,
-      this.superAdmin.payer,
-      this.superAdmin.publicKey,
-      null,
-      this.PAYMENT_DECIMALS,
-      undefined,
-      undefined,
-      TOKEN_PROGRAM_ID
+    // Create admin USDC account
+    this.adminUsdcAccount = await createAssociatedTokenAccount(
+      this.connection,
+      this.admin,
+      this.usdcMint,
+      this.admin.publicKey
     );
-    console.log("Wrong payment mint:", this.wrongPaymentMint.toBase58());
 
-    // Derive admin state PDA
-    [this.adminState] = await anchor.web3.PublicKey.findProgramAddress(
+    // Mint USDC to admin
+    await mintTo(
+      this.connection,
+      this.admin,
+      this.usdcMint,
+      this.adminUsdcAccount,
+      this.admin,
+      1000000000 // 1000 USDC
+    );
+
+    // Create test users (now that USDC mint exists)
+    this.user1 = await this.createTestUser(5); // 5 SOL
+    this.user2 = await this.createTestUser(5); // 5 SOL
+
+    // Derive PDAs
+    [this.adminStatePda, this.adminStateBump] = PublicKey.findProgramAddressSync(
       [Buffer.from("admin_state")],
       this.program.programId
     );
-    console.log("Admin state PDA:", this.adminState.toBase58());
 
-    // Derive vault PDA
-    [this.vault] = await anchor.web3.PublicKey.findProgramAddress(
-      [Buffer.from("vault"), this.paymentMint.toBuffer()],
+    [this.vaultPda, this.vaultBump] = PublicKey.findProgramAddressSync(
+      [Buffer.from("vault"), this.usdcMint.toBuffer()],
       this.program.programId
     );
-    console.log("Vault PDA:", this.vault.toBase58());
-
-    // Create withdraw wallet token accounts
-    this.withdrawWalletTokenAccount = await createAssociatedTokenAccount(
-      this.provider.connection,
-      this.superAdmin.payer,
-      this.paymentMint,
-      this.withdrawWallet.publicKey,
-      undefined,
-      TOKEN_PROGRAM_ID
-    );
-
-    this.newWithdrawWalletTokenAccount = await createAssociatedTokenAccount(
-      this.provider.connection,
-      this.superAdmin.payer,
-      this.paymentMint,
-      this.newWithdrawWallet.publicKey,
-      undefined,
-      TOKEN_PROGRAM_ID
-    );
-
-    // Airdrop SOL to users
-    const airdropTargets = [
-      this.user,
-      this.user2,
-      this.user3,
-    ];
-    for (const target of airdropTargets) {
-      const sig = await this.provider.connection.requestAirdrop(
-        target.publicKey,
-        2e9
-      );
-      await this.provider.connection.confirmTransaction(sig, "confirmed");
-    }
-
-    // Create user's token account and mint USDC
-    this.userTokenAccount = await createAssociatedTokenAccount(
-      this.provider.connection,
-      this.superAdmin.payer,
-      this.paymentMint,
-      this.user.publicKey,
-      undefined,
-      TOKEN_PROGRAM_ID
-    );
-
-    await mintTo(
-      this.provider.connection,
-      this.superAdmin.payer,
-      this.paymentMint,
-      this.userTokenAccount,
-      this.superAdmin.publicKey,
-      100 * 10 ** this.PAYMENT_DECIMALS,
-      [],
-      undefined,
-      TOKEN_PROGRAM_ID
-    );
-
-    // Create user2's token account and mint USDC
-    this.user2TokenAccount = await createAssociatedTokenAccount(
-      this.provider.connection,
-      this.superAdmin.payer,
-      this.paymentMint,
-      this.user2.publicKey,
-      undefined,
-      TOKEN_PROGRAM_ID
-    );
-
-    await mintTo(
-      this.provider.connection,
-      this.superAdmin.payer,
-      this.paymentMint,
-      this.user2TokenAccount,
-      this.superAdmin.publicKey,
-      100 * 10 ** this.PAYMENT_DECIMALS,
-      [],
-      undefined,
-      TOKEN_PROGRAM_ID
-    );
-
-    // Create user3's token account and mint USDC
-    this.user3TokenAccount = await createAssociatedTokenAccount(
-      this.provider.connection,
-      this.superAdmin.payer,
-      this.paymentMint,
-      this.user3.publicKey,
-      undefined,
-      TOKEN_PROGRAM_ID
-    );
-
-    await mintTo(
-      this.provider.connection,
-      this.superAdmin.payer,
-      this.paymentMint,
-      this.user3TokenAccount,
-      this.superAdmin.publicKey,
-      100 * 10 ** this.PAYMENT_DECIMALS,
-      [],
-      undefined,
-      TOKEN_PROGRAM_ID
-    );
-
-    console.log("Super admin:", this.superAdmin.publicKey.toBase58());
-    console.log("Withdraw wallet:", this.withdrawWallet.publicKey.toBase58());
-    console.log("New withdraw wallet:", this.newWithdrawWallet.publicKey.toBase58());
-    console.log("User:", this.user.publicKey.toBase58());
-    console.log("User 2:", this.user2.publicKey.toBase58());
-    console.log("User 3:", this.user3.publicKey.toBase58());
 
     this.initialized = true;
   }
 
-  async getAdminStatePDA(): Promise<PublicKey> {
-    const [adminState] = await anchor.web3.PublicKey.findProgramAddress(
-      [Buffer.from("admin_state")],
-      this.program.programId
+  private async createTestUser(solAmount: number): Promise<TestUser> {
+    const keypair = Keypair.generate();
+
+    // Airdrop SOL
+    await this.airdropSol(keypair.publicKey, solAmount);
+
+    // Create USDC token account
+    const tokenAccount = await createAssociatedTokenAccount(
+      this.connection,
+      this.admin,
+      this.usdcMint,
+      keypair.publicKey
     );
-    return adminState;
+
+    // Mint some USDC to the user
+    await mintTo(
+      this.connection,
+      this.admin,
+      this.usdcMint,
+      tokenAccount,
+      this.admin,
+      500000000 // 500 USDC each
+    );
+
+    return {
+      keypair,
+      tokenAccount,
+      usdcBalance: new BN(500000000),
+    };
   }
 
-  async getUserStatePDA(user: PublicKey): Promise<PublicKey> {
-    const [userState] = await anchor.web3.PublicKey.findProgramAddress(
-      [Buffer.from("user_state"), user.toBuffer()],
-      this.program.programId
+  public async airdropSol(publicKey: PublicKey, amount: number): Promise<void> {
+    const signature = await this.connection.requestAirdrop(
+      publicKey,
+      amount * LAMPORTS_PER_SOL
     );
-    return userState;
+    await this.connection.confirmTransaction(signature);
   }
 
-  async getCollectionStatePDA(collectionMint: PublicKey): Promise<PublicKey> {
-    const [collectionState] = await anchor.web3.PublicKey.findProgramAddress(
+  // Helper to get user state PDA
+  public getUserStatePda(userPubkey: PublicKey): [PublicKey, number] {
+    return PublicKey.findProgramAddressSync(
+      [Buffer.from("user_state"), userPubkey.toBuffer()],
+      this.program.programId
+    );
+  }
+
+  // Helper to get metadata PDA (Metaplex standard)
+  public getMetadataPda(mint: PublicKey): [PublicKey, number] {
+    return PublicKey.findProgramAddressSync(
+      [
+        Buffer.from("metadata"),
+        new PublicKey("metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s").toBuffer(),
+        mint.toBuffer(),
+      ],
+      new PublicKey("metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s")
+    );
+  }
+
+  // Helper to get master edition PDA (Metaplex standard)
+  public getMasterEditionPda(mint: PublicKey): [PublicKey, number] {
+    return PublicKey.findProgramAddressSync(
+      [
+        Buffer.from("metadata"),
+        new PublicKey("metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s").toBuffer(),
+        mint.toBuffer(),
+        Buffer.from("edition"),
+      ],
+      new PublicKey("metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s")
+    );
+  }
+
+  // Helper to fetch admin state
+  public async fetchAdminState(): Promise<any> {
+    return await this.program.account.adminState.fetch(this.adminStatePda);
+  }
+
+  // Helper to fetch user state
+  public async fetchUserState(userPubkey: PublicKey): Promise<any> {
+    const [userStatePda] = this.getUserStatePda(userPubkey);
+    return await this.program.account.userState.fetch(userStatePda);
+  }
+
+  // Helper to fetch collection state
+  public async fetchCollectionState(collectionMint: PublicKey): Promise<any> {
+    const [collectionStatePda] = PublicKey.findProgramAddressSync(
       [Buffer.from("collection"), collectionMint.toBuffer()],
       this.program.programId
     );
-    return collectionState;
+    return await this.program.account.collectionState.fetch(collectionStatePda);
   }
 
-  async fetchAdminState() {
-    const adminState = await this.getAdminStatePDA();
-    return this.program.account.adminState.fetch(adminState);
-  }
-
-  async fetchUserState(user: PublicKey) {
-    const userState = await this.getUserStatePDA(user);
-    return this.program.account.userState.fetch(userState);
-  }
-
-  // Helper to get token account address for NFT
-  getNftTokenAccount(mint: PublicKey, owner: PublicKey): PublicKey {
-    return getAssociatedTokenAddressSync(
-      mint,
-      owner,
-      false,
-      TOKEN_2022_PROGRAM_ID,
-      ASSOCIATED_TOKEN_PROGRAM_ID
+  // Helper to mint USDC to a user
+  public async mintUsdcTo(destination: PublicKey, amount: number): Promise<void> {
+    await mintTo(
+      this.connection,
+      this.admin,
+      this.usdcMint,
+      destination,
+      this.admin,
+      amount
     );
+  }
+
+  // Helper to get vault balance as number
+  public async getVaultBalance(): Promise<bigint> {
+    const vaultAccount = await getAccount(this.connection, this.vaultPda);
+    return vaultAccount.amount;
   }
 }
 
 // Export singleton instance
-export const ctx = TestContext.getInstance();
+export const testContext = TestContext.getInstance();
 
-// Export common imports for test files
-export {
-  TOKEN_PROGRAM_ID,
-  TOKEN_2022_PROGRAM_ID,
-  ASSOCIATED_TOKEN_PROGRAM_ID,
-  getAssociatedTokenAddressSync,
+// Initialize context before tests
+export const initializeTestContext = async (): Promise<void> => {
+  await testContext.initialize();
+};
+
+// Helper to create withdraw wallet keypair
+export const createWithdrawWallet = (): Keypair => {
+  return Keypair.generate();
+};
+
+// Helper to assert admin state values
+export const assertAdminState = async (
+  expectedValues: Partial<{
+    superAdmin: PublicKey;
+    withdrawWallet: PublicKey;
+    mintFee: BN;
+    maxSupply: BN;
+    mintStartDate: BN;
+    donglePriceNftHolder: BN;
+    donglePriceNormal: BN;
+    purchaseStarted: boolean;
+    ogCollection: PublicKey;
+    dongleProofCollection: PublicKey;
+  }>
+): Promise<void> => {
+  const adminState = await testContext.fetchAdminState();
+
+  if (expectedValues.superAdmin) {
+    expect(adminState.superAdmin.toString()).to.equal(expectedValues.superAdmin.toString());
+  }
+  if (expectedValues.withdrawWallet) {
+    expect(adminState.withdrawWallet.toString()).to.equal(expectedValues.withdrawWallet.toString());
+  }
+  if (expectedValues.mintFee) {
+    expect(adminState.mintFee.toString()).to.equal(expectedValues.mintFee.toString());
+  }
+  if (expectedValues.maxSupply) {
+    expect(adminState.maxSupply.toString()).to.equal(expectedValues.maxSupply.toString());
+  }
+  if (expectedValues.mintStartDate !== undefined) {
+    expect(adminState.mintStartDate.toString()).to.equal(expectedValues.mintStartDate.toString());
+  }
+  if (expectedValues.donglePriceNftHolder) {
+    expect(adminState.donglePriceNftHolder.toString()).to.equal(expectedValues.donglePriceNftHolder.toString());
+  }
+  if (expectedValues.donglePriceNormal) {
+    expect(adminState.donglePriceNormal.toString()).to.equal(expectedValues.donglePriceNormal.toString());
+  }
+  if (expectedValues.purchaseStarted !== undefined) {
+    expect(adminState.purchaseStarted).to.equal(expectedValues.purchaseStarted);
+  }
+  if (expectedValues.ogCollection) {
+    expect(adminState.ogCollection.toString()).to.equal(expectedValues.ogCollection.toString());
+  }
+  if (expectedValues.dongleProofCollection) {
+    expect(adminState.dongleProofCollection.toString()).to.equal(expectedValues.dongleProofCollection.toString());
+  }
 };

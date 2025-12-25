@@ -22,15 +22,16 @@ pub struct MintNftEvent {
 }
 
 #[derive(Accounts)]
-// #[instruction(name: String, symbol: String, uri: String)]
 pub struct MintNft<'info> {
     #[account(mut)]
     pub signer: Signer<'info>,
     pub system_program: Program<'info, System>,
     pub token_program: Program<'info, Token>,
+    
     /// CHECK: We will create this one for the user
     #[account(mut)]
-    pub token_account: AccountInfo<'info>,
+    pub token_account: UncheckedAccount<'info>,
+    
     #[account(
         init,
         payer = signer,
@@ -38,25 +39,26 @@ pub struct MintNft<'info> {
         mint::authority = admin_state,
         mint::freeze_authority = admin_state,
     )]
-    pub mint: Account<'info, Mint>,
+    pub mint: Box<Account<'info, Mint>>,
+    
     pub rent: Sysvar<'info, Rent>,
     pub associated_token_program: Program<'info, AssociatedToken>,
-    /// CHECK: Metaplex Token Metadata program
-    pub token_metadata_program: AccountInfo<'info>,
-    /// CHECK: Metadata account for the NFT - derived from mint
-    #[account(
-        mut,
-        seeds = [b"metadata", token_metadata_program.key().as_ref(), mint.key().as_ref()],
-        bump,
-        seeds::program = token_metadata_program.key(),
-    )]
-    pub metadata_account: AccountInfo<'info>,
+    
+    /// CHECK: Metaplex Token Metadata program - validated by address
+    #[account(address = mpl_token_metadata::ID)]
+    pub token_metadata_program: UncheckedAccount<'info>,
+    
+    /// CHECK: Metadata account - validated by Metaplex program during CPI
+    #[account(mut)]
+    pub metadata_account: UncheckedAccount<'info>,
+    
     #[account(
         mut,
         seeds = [b"admin_state".as_ref()],
         bump,
     )]
     pub admin_state: Box<Account<'info, AdminState>>,
+    
     #[account(
         init_if_needed,
         seeds = [b"user_state".as_ref(), signer.key().as_ref()],
@@ -71,7 +73,7 @@ pub struct MintNft<'info> {
     #[account(
         constraint = payment_mint.key() == admin_state.payment_mint @ ProgramErrorCode::InvalidPaymentMint
     )]
-    pub payment_mint: InterfaceAccount<'info, InterfaceMint>,
+    pub payment_mint: Box<InterfaceAccount<'info, InterfaceMint>>,
 
     /// Payer's token account for payment
     #[account(
@@ -79,25 +81,87 @@ pub struct MintNft<'info> {
         constraint = payer_token_account.mint == payment_mint.key() @ ProgramErrorCode::InvalidPaymentTokenAccount,
         constraint = payer_token_account.owner == signer.key() @ ProgramErrorCode::InvalidPaymentTokenAccount
     )]
-    pub payer_token_account: InterfaceAccount<'info, InterfaceTokenAccount>,
+    pub payer_token_account: Box<InterfaceAccount<'info, InterfaceTokenAccount>>,
 
     /// Vault token account (PDA-controlled) to receive payment - created in init_admin
     #[account(
         mut,
         seeds = [b"vault", payment_mint.key().as_ref()],
         bump,
-        token::mint = payment_mint,
-        token::authority = admin_state,
-        token::token_program = payment_token_program,
     )]
-    pub vault: InterfaceAccount<'info, InterfaceTokenAccount>,
+    pub vault: Box<InterfaceAccount<'info, InterfaceTokenAccount>>,
 
     /// Token program for payment (can be Token or Token2022)
     pub payment_token_program: Interface<'info, TokenInterface>,
 
     // === Optional Collection ===
     /// CHECK: Optional collection mint account for grouping NFTs
-    pub collection_mint: Option<AccountInfo<'info>>,
+    pub collection_mint: Option<UncheckedAccount<'info>>,
+}
+
+#[inline(never)]
+fn create_nft_metadata<'info>(
+    metadata_account: &AccountInfo<'info>,
+    mint: &AccountInfo<'info>,
+    admin_state: &AccountInfo<'info>,
+    signer_account: &AccountInfo<'info>,
+    system_program: &AccountInfo<'info>,
+    rent: &AccountInfo<'info>,
+    name: String,
+    symbol: String,
+    uri: String,
+    collection_key: Option<Pubkey>,
+    signer_seeds: &[&[&[u8]]],
+) -> Result<()> {
+    let create_metadata_ix = CreateMetadataAccountV3 {
+        metadata: metadata_account.key(),
+        mint: mint.key(),
+        mint_authority: admin_state.key(),
+        update_authority: (admin_state.key(), true),
+        payer: signer_account.key(),
+        system_program: system_program.key(),
+        rent: Some(rent.key()),
+    };
+
+    let data = DataV2 {
+        name,
+        symbol,
+        uri,
+        seller_fee_basis_points: 0,
+        creators: Some(vec![Creator {
+            address: admin_state.key(),
+            verified: false,
+            share: 100,
+        }]),
+        collection: collection_key.map(|key| mpl_token_metadata::types::Collection {
+            verified: false,
+            key,
+        }),
+        uses: None,
+    };
+
+    let args = CreateMetadataAccountV3InstructionArgs {
+        data,
+        is_mutable: true,
+        collection_details: None,
+    };
+
+    let ix = create_metadata_ix.instruction(args);
+
+    invoke_signed(
+        &ix,
+        &[
+            metadata_account.clone(),
+            mint.clone(),
+            admin_state.clone(),
+            signer_account.clone(),
+            system_program.clone(),
+            rent.clone(),
+        ],
+        signer_seeds,
+    )?;
+
+    Ok(())
 }
 
 pub fn handler(ctx: Context<MintNft>, name: String, symbol: String, uri: String) -> Result<()> {
@@ -128,86 +192,26 @@ pub fn handler(ctx: Context<MintNft>, name: String, symbol: String, uri: String)
         );
     }
 
-    // Mint is already initialized by the init constraint above
-
-    // Create metadata for the NFT
-    let seeds = b"admin_state";
     let bump = ctx.bumps.admin_state;
-    let signer: &[&[&[u8]]] = &[&[seeds, &[bump]]];
+    let signer_seeds: &[&[&[u8]]] = &[&[b"admin_state", &[bump]]];
 
-    // Create additional metadata based on collection type
-    let _additional_metadata = if let Some(collection_mint) = &ctx.accounts.collection_mint {
-        let collection_key = collection_mint.key().to_string();
-        match collection_key.as_str() {
-            // OG Collection - add consumption tracking and utility info
-            _ if collection_key == ctx.accounts.admin_state.og_collection.to_string() => {
-                format!("{{\"collection\":\"{}\",\"nft_type\":\"og\",\"consumed\":\"false\",\"discount_tier\":\"standard\",\"profit_sharing_eligible\":\"true\"}}", collection_key)
-            },
-            // Dongle Proof Collection - add purchase details
-            _ if collection_key == ctx.accounts.admin_state.dongle_proof_collection.to_string() => {
-                let timestamp = Clock::get()?.unix_timestamp;
-                format!("{{\"collection\":\"{}\",\"nft_type\":\"dongle_proof\",\"purchase_date\":\"{}\",\"dongle_specs\":\"{{}}\"}}", collection_key, timestamp)
-            },
-            // Generic collection
-            _ => {
-                format!("{{\"collection\":\"{}\",\"nft_type\":\"generic\"}}", collection_key)
-            }
-        }
-    } else {
-        "{}".to_string()
-    };
+    // Get collection key if provided
+    let collection_key = ctx.accounts.collection_mint.as_ref().map(|m| m.key());
 
-    // Create the metadata account using Metaplex
-    let create_metadata_ix = CreateMetadataAccountV3 {
-        metadata: ctx.accounts.metadata_account.key(),
-        mint: ctx.accounts.mint.key(),
-        mint_authority: ctx.accounts.admin_state.key(),
-        update_authority: (ctx.accounts.admin_state.key(), true),
-        payer: ctx.accounts.signer.key(),
-        system_program: ctx.accounts.system_program.key(),
-        rent: Some(ctx.accounts.rent.key()),
-    };
-
-    let data = DataV2 {
+    // Create metadata
+    create_nft_metadata(
+        &ctx.accounts.metadata_account.to_account_info(),
+        &ctx.accounts.mint.to_account_info(),
+        &ctx.accounts.admin_state.to_account_info(),
+        &ctx.accounts.signer.to_account_info(),
+        &ctx.accounts.system_program.to_account_info(),
+        &ctx.accounts.rent.to_account_info(),
         name,
         symbol,
         uri,
-        seller_fee_basis_points: 0, // No royalties for these NFTs
-        creators: Some(vec![Creator {
-            address: ctx.accounts.admin_state.key(),
-            verified: false, // We'll verify this
-            share: 100,
-        }]),
-        collection: ctx.accounts.collection_mint.as_ref().map(|mint| mpl_token_metadata::types::Collection {
-            verified: false,
-            key: mint.key(),
-        }),
-        uses: None,
-    };
-
-    let args = CreateMetadataAccountV3InstructionArgs {
-        data,
-        is_mutable: true, // Allow updates
-        collection_details: None,
-    };
-
-    let ix = create_metadata_ix.instruction(args);
-
-    invoke_signed(
-        &ix,
-        &[
-            ctx.accounts.metadata_account.to_account_info(),
-            ctx.accounts.mint.to_account_info(),
-            ctx.accounts.admin_state.to_account_info(),
-            ctx.accounts.signer.to_account_info(),
-            ctx.accounts.system_program.to_account_info(),
-            ctx.accounts.rent.to_account_info(),
-        ],
-        signer,
+        collection_key,
+        signer_seeds,
     )?;
-
-    // Note: For regular Metaplex NFTs, metadata updates would be done through the Metaplex program
-    // not through the token program directly
 
     // Create the associated token account
     associated_token::create(CpiContext::new(
@@ -231,33 +235,18 @@ pub fn handler(ctx: Context<MintNft>, name: String, symbol: String, uri: String)
                 to: ctx.accounts.token_account.to_account_info(),
                 authority: ctx.accounts.admin_state.to_account_info(),
             },
-            signer,
+            signer_seeds,
         ),
         1,
     )?;
 
-    // Remove mint authority to make it immutable (typical for NFTs)
-    // TODO: Fix AuthorityType import conflict and re-enable
-    // token::set_authority(
-    //     CpiContext::new_with_signer(
-    //         ctx.accounts.token_program.to_account_info(),
-    //         token::SetAuthority {
-    //             current_authority: ctx.accounts.admin_state.to_account_info(),
-    //             account_or_mint: ctx.accounts.mint.to_account_info(),
-    //         },
-    //         signer,
-    //     ),
-    //     AuthorityType::MintTokens,
-    //     None,
-    // )?;
-
-    // Runtime validation: ensure mint fee is valid (defense in depth)
+    // Runtime validation: ensure mint fee is valid
     require!(
         ctx.accounts.admin_state.mint_fee > 0,
         ProgramErrorCode::InvalidMintFee
     );
 
-    // Transfer payment tokens (e.g., USDC) from payer to vault
+    // Transfer payment tokens from payer to vault
     transfer_checked(
         CpiContext::new(
             ctx.accounts.payment_token_program.to_account_info(),
@@ -272,7 +261,7 @@ pub fn handler(ctx: Context<MintNft>, name: String, symbol: String, uri: String)
         ctx.accounts.payment_mint.decimals,
     )?;
 
-    // store user's info - nft address and mint date
+    // Store user's info
     let clock = Clock::get()?;
     ctx.accounts.user_state.nft_address = ctx.accounts.mint.key();
     ctx.accounts.user_state.nft_mint_date = clock.unix_timestamp;
@@ -281,12 +270,13 @@ pub fn handler(ctx: Context<MintNft>, name: String, symbol: String, uri: String)
         .current_reserved_count
         .checked_add(1)
         .ok_or(ProgramErrorCode::ReservedCountOverflow)?;
+
     msg!(
         "Current reserved count: {}",
         ctx.accounts.admin_state.current_reserved_count
     );
 
-    // Emit event for reliable filtering
+    // Emit event
     emit!(MintNftEvent {
         user: ctx.accounts.signer.key(),
         mint_address: ctx.accounts.mint.key(),

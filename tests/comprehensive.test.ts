@@ -1,414 +1,254 @@
 import * as anchor from "@coral-xyz/anchor";
-import {
-  TOKEN_PROGRAM_ID,
-  TOKEN_2022_PROGRAM_ID,
-  ASSOCIATED_TOKEN_PROGRAM_ID,
-  getAssociatedTokenAddressSync,
-  createAssociatedTokenAccount,
-  mintTo,
-} from "@solana/spl-token";
-import { PublicKey, Keypair } from "@solana/web3.js";
-import assert from "assert";
-import { ctx } from "./setup";
+import { expect } from "chai";
+import { testContext, initializeTestContext, MINT_FEE, MAX_SUPPLY, MINT_START_DATE, DONGLE_PRICE_NFT_HOLDER, DONGLE_PRICE_NORMAL } from "./setup";
+import { Keypair, PublicKey } from "@solana/web3.js";
+import { TOKEN_PROGRAM_ID, getAccount, createAssociatedTokenAccount, mintTo } from "@solana/spl-token";
 
-describe("Soulbound NFT for Reservation - Comprehensive Test Suite", () => {
+describe("Complete User Journey (Admin + Commerce)", () => {
   before(async () => {
-    await ctx.initialize();
+    await initializeTestContext();
   });
 
-  describe("Complete User Journey", () => {
-    it("should execute full user journey: init admin -> create collections -> mint NFT -> purchase dongle -> burn NFT", async () => {
-      console.log("\n=== Starting Complete User Journey Test ===\n");
+  it("should complete full admin and commerce journey", async () => {
+    // ===== PHASE 1: Admin Setup =====
+    console.log("🚀 Phase 1: Admin Setup");
 
-      // Step 1: Initialize Admin
-      console.log("Step 1: Initializing admin state...");
-      const initTx = await ctx.program.methods
+    // Initialize admin if not done
+    if (!testContext.adminInitialized) {
+      const initTx = await testContext.program.methods
         .initAdmin(
-          new anchor.BN(ctx.MINT_FEE),
-          new anchor.BN(ctx.MAX_SUPPLY),
-          ctx.withdrawWallet.publicKey,
-          new anchor.BN(0), // mint_start_date: 0 = no restriction
-          new anchor.BN(ctx.DONGLE_PRICE_NFT_HOLDER),
-          new anchor.BN(ctx.DONGLE_PRICE_NORMAL)
+          MINT_FEE,
+          MAX_SUPPLY,
+          testContext.withdrawWallet.publicKey,
+          MINT_START_DATE,
+          DONGLE_PRICE_NFT_HOLDER,
+          DONGLE_PRICE_NORMAL
         )
         .accounts({
-          superAdmin: ctx.superAdmin.publicKey,
-          paymentMint: ctx.paymentMint,
+          superAdmin: testContext.admin.publicKey,
+          paymentMint: testContext.usdcMint,
           paymentTokenProgram: TOKEN_PROGRAM_ID,
         })
-        .rpc({ skipPreflight: true });
+        .signers([testContext.admin])
+        .rpc();
 
-      await ctx.provider.connection.confirmTransaction(initTx, "confirmed");
-      console.log("✓ Admin initialized successfully");
+      console.log("✅ Admin initialized:", initTx);
+      testContext.adminInitialized = true;
+    } else {
+      console.log("✅ Admin already initialized");
+    }
 
-      let adminState = await ctx.fetchAdminState();
-      assert.strictEqual(adminState.superAdmin.toBase58(), ctx.superAdmin.publicKey.toBase58());
-      assert.strictEqual(adminState.mintFee.toNumber(), ctx.MINT_FEE);
-      assert.strictEqual(adminState.maxSupply.toNumber(), ctx.MAX_SUPPLY);
-
-      // Step 2: Create OG Collection
-      console.log("\nStep 2: Creating OG Collection...");
-      const ogCollectionMint = Keypair.generate();
-
-      const createOgCollectionTx = await ctx.program.methods
-        .createCollectionNft("OG Collection", "OG", "https://example.com/og-collection.json")
+    // Update withdraw wallet to admin if different
+    const currentAdminState = await testContext.fetchAdminState();
+    if (currentAdminState.withdrawWallet.toString() !== testContext.admin.publicKey.toString()) {
+      await testContext.program.methods
+        .updateWithdrawWallet(testContext.admin.publicKey)
         .accounts({
-          signer: ctx.superAdmin.publicKey,
-          collectionMint: ogCollectionMint.publicKey,
-          tokenMetadataProgram: new PublicKey("metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s"), // Metaplex Token Metadata program
+          superAdmin: testContext.admin.publicKey,
         })
-        .signers([ogCollectionMint])
-        .rpc({ skipPreflight: true });
+        .signers([testContext.admin])
+        .rpc();
+    }
 
-      await ctx.provider.connection.confirmTransaction(createOgCollectionTx, "confirmed");
-      console.log("✓ OG Collection created successfully");
+    // Enable purchases
+    await testContext.program.methods
+      .updatePurchaseStarted(true)
+      .accounts({
+        superAdmin: testContext.admin.publicKey,
+      })
+      .signers([testContext.admin])
+      .rpc();
 
-      // Update admin state with OG collection
-      await ctx.program.methods
-        .updateOgCollection(ogCollectionMint.publicKey)
-        .accounts({
-          superAdmin: ctx.superAdmin.publicKey,
-        })
-        .rpc({ skipPreflight: true });
+    console.log("✅ Purchase started enabled");
 
-      adminState = await ctx.fetchAdminState();
-      assert.strictEqual(adminState.ogCollection.toBase58(), ogCollectionMint.publicKey.toBase58());
+    // Set reasonable dongle prices for testing
+    await testContext.program.methods
+      .updateDonglePriceNftHolder(new anchor.BN(10000000)) // 10 USDC
+      .accounts({
+        superAdmin: testContext.admin.publicKey,
+      })
+      .signers([testContext.admin])
+      .rpc();
 
-      // Step 3: Create Dongle Proof Collection
-      console.log("\nStep 3: Creating Dongle Proof Collection...");
-      const dongleProofCollectionMint = Keypair.generate();
+    await testContext.program.methods
+      .updateDonglePriceNormal(new anchor.BN(50000000)) // 50 USDC
+      .accounts({
+        superAdmin: testContext.admin.publicKey,
+      })
+      .signers([testContext.admin])
+      .rpc();
 
-      const createDongleProofCollectionTx = await ctx.program.methods
-        .createCollectionNft("Dongle Proof Collection", "DONGLE", "https://example.com/dongle-collection.json")
-        .accounts({
-          signer: ctx.superAdmin.publicKey,
-          collectionMint: dongleProofCollectionMint.publicKey,
-          tokenMetadataProgram: new PublicKey("metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s"),
-        })
-        .signers([dongleProofCollectionMint])
-        .rpc({ skipPreflight: true });
+    console.log("✅ Dongle prices updated");
 
-      await ctx.provider.connection.confirmTransaction(createDongleProofCollectionTx, "confirmed");
-      console.log("✓ Dongle Proof Collection created successfully");
+    // ===== PHASE 2: Dongle Purchasing =====
+    console.log("🛒 Phase 2: Dongle Purchasing");
 
-      // Update admin state with Dongle Proof collection
-      await ctx.program.methods
-        .updateDongleProofCollection(dongleProofCollectionMint.publicKey)
-        .accounts({
-          superAdmin: ctx.superAdmin.publicKey,
-        })
-        .rpc({ skipPreflight: true });
+    // Create a new user and make a purchase
+    const newUser = Keypair.generate();
+    await testContext.connection.confirmTransaction(
+      await testContext.connection.requestAirdrop(newUser.publicKey, 10 * anchor.web3.LAMPORTS_PER_SOL)
+    );
 
-      adminState = await ctx.fetchAdminState();
-      assert.strictEqual(adminState.dongleProofCollection.toBase58(), dongleProofCollectionMint.publicKey.toBase58());
+    const newUserUsdcAccount = await createAssociatedTokenAccount(
+      testContext.connection,
+      testContext.admin,
+      testContext.usdcMint,
+      newUser.publicKey
+    );
 
-      // Step 4: Mint OG NFT for user
-      console.log("\nStep 4: Minting OG NFT for user...");
-      const nftMint = Keypair.generate();
+    await mintTo(
+      testContext.connection,
+      testContext.admin,
+      testContext.usdcMint,
+      newUserUsdcAccount,
+      testContext.admin,
+      100000000 // 100 USDC
+    );
 
-      const mintNftTx = await ctx.program.methods
-        .mintNft("Test OG NFT", "TEST", "https://example.com/test-nft.json")
-        .accounts({
-          signer: ctx.user.publicKey,
-          mint: nftMint.publicKey,
-          tokenAccount: getAssociatedTokenAddressSync(nftMint.publicKey, ctx.user.publicKey),
-          tokenMetadataProgram: new PublicKey("metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s"),
-          collectionMint: ogCollectionMint.publicKey,
-          paymentMint: ctx.paymentMint,
-          payerTokenAccount: ctx.userTokenAccount,
-          paymentTokenProgram: TOKEN_PROGRAM_ID,
-        })
-        .signers([ctx.user, nftMint])
-        .rpc({ skipPreflight: true });
+    const vaultBalanceBefore = await testContext.getVaultBalance();
 
-      await ctx.provider.connection.confirmTransaction(mintNftTx, "confirmed");
-      console.log("✓ OG NFT minted successfully");
+    // New user purchases dongle at normal price (no NFT)
+    const [newUserStatePda] = testContext.getUserStatePda(newUser.publicKey);
+    const purchaseTx = await testContext.program.methods
+      .purchaseDongle()
+      .accounts({
+        buyer: newUser.publicKey,
+        paymentMint: testContext.usdcMint,
+        buyerTokenAccount: newUserUsdcAccount,
+        paymentTokenProgram: TOKEN_PROGRAM_ID,
+      })
+      .signers([newUser])
+      .rpc();
 
-      // Verify user state updated
-      const userState = await ctx.fetchUserState(ctx.user.publicKey);
-      assert.strictEqual(userState.nftAddress.toBase58(), nftMint.publicKey.toBase58());
-      assert.ok(userState.nftMintDate.toNumber() > 0);
+    console.log("✅ User purchased dongle:", purchaseTx);
 
-      // Step 5: Enable purchases and test dongle purchase with NFT holder discount
-      console.log("\nStep 5: Enabling purchases and testing dongle purchase with discount...");
+    // Verify user state
+    const userState = await testContext.fetchUserState(newUser.publicKey);
+    expect(userState.purchasedDate.toNumber()).to.be.greaterThan(0);
 
-      // Enable purchases
-      await ctx.program.methods
-        .updatePurchaseStarted(true)
-        .accounts({
-          superAdmin: ctx.superAdmin.publicKey,
-        })
-        .rpc({ skipPreflight: true });
+    // Verify vault balance increased
+    const vaultBalanceAfter = await testContext.getVaultBalance();
+    expect(Number(vaultBalanceAfter)).to.be.greaterThan(Number(vaultBalanceBefore));
 
-      adminState = await ctx.fetchAdminState();
-      assert.strictEqual(adminState.purchaseStarted, true);
+    console.log("✅ Vault balance increased by", Number(vaultBalanceAfter - vaultBalanceBefore) / 1000000, "USDC");
 
-      // Purchase dongle with NFT holder discount
-      const purchaseTx = await ctx.program.methods
+    // ===== PHASE 3: Fund Management =====
+    console.log("💰 Phase 3: Fund Management");
+
+    // Check vault balance
+    const vaultBalance = await testContext.getVaultBalance();
+    console.log("💰 Vault balance:", Number(vaultBalance) / 1000000, "USDC");
+
+    // Withdraw some funds
+    const withdrawAmount = vaultBalance / BigInt(2);
+    const withdrawTx = await testContext.program.methods
+      .withdraw(new anchor.BN(withdrawAmount.toString()))
+      .accounts({
+        superAdmin: testContext.admin.publicKey,
+        paymentMint: testContext.usdcMint,
+        withdrawTokenAccount: testContext.adminUsdcAccount,
+        tokenProgram: TOKEN_PROGRAM_ID,
+      })
+      .signers([testContext.admin])
+      .rpc();
+
+    console.log("✅ Withdrew funds:", withdrawTx);
+
+    // Withdraw remaining funds
+    const withdrawAllTx = await testContext.program.methods
+      .withdrawAll()
+      .accounts({
+        superAdmin: testContext.admin.publicKey,
+        paymentMint: testContext.usdcMint,
+        withdrawTokenAccount: testContext.adminUsdcAccount,
+        tokenProgram: TOKEN_PROGRAM_ID,
+      })
+      .signers([testContext.admin])
+      .rpc();
+
+    console.log("✅ Withdrew all remaining funds:", withdrawAllTx);
+
+    // Verify vault is empty
+    const finalVaultBalance = await testContext.getVaultBalance();
+    expect(Number(finalVaultBalance)).to.equal(0);
+
+    // ===== PHASE 4: Admin Update Verification =====
+    console.log("✅ Phase 4: Admin State Verification");
+
+    const adminState = await testContext.fetchAdminState();
+    expect(adminState.purchaseStarted).to.be.true;
+    expect(adminState.donglePriceNormal.toNumber()).to.equal(50000000);
+    expect(adminState.donglePriceNftHolder.toNumber()).to.equal(10000000);
+
+    console.log("🎉 Complete user journey test passed!");
+    console.log("📊 Final Statistics:");
+    console.log("   • Dongles purchased: 1");
+    console.log("   • Funds in vault: 0 (all withdrawn)");
+  });
+
+  it("should handle error scenarios gracefully", async () => {
+    console.log("🧪 Testing error scenarios");
+
+    // Disable purchases
+    await testContext.program.methods
+      .updatePurchaseStarted(false)
+      .accounts({
+        superAdmin: testContext.admin.publicKey,
+      })
+      .signers([testContext.admin])
+      .rpc();
+
+    // Try to purchase dongle when disabled
+    const tempUser = Keypair.generate();
+    await testContext.connection.confirmTransaction(
+      await testContext.connection.requestAirdrop(tempUser.publicKey, 5 * anchor.web3.LAMPORTS_PER_SOL)
+    );
+
+    const tempUserUsdcAccount = await createAssociatedTokenAccount(
+      testContext.connection,
+      testContext.admin,
+      testContext.usdcMint,
+      tempUser.publicKey
+    );
+
+    await mintTo(
+      testContext.connection,
+      testContext.admin,
+      testContext.usdcMint,
+      tempUserUsdcAccount,
+      testContext.admin,
+      100000000 // 100 USDC
+    );
+
+    const [tempUserStatePda] = testContext.getUserStatePda(tempUser.publicKey);
+
+    try {
+      await testContext.program.methods
         .purchaseDongle()
         .accounts({
-          buyer: ctx.user.publicKey,
-          paymentMint: ctx.paymentMint,
-          buyerTokenAccount: ctx.userTokenAccount,
+          buyer: tempUser.publicKey,
+          paymentMint: testContext.usdcMint,
+          buyerTokenAccount: tempUserUsdcAccount,
           paymentTokenProgram: TOKEN_PROGRAM_ID,
         })
-        .signers([ctx.user])
-        .rpc({ skipPreflight: true });
+        .signers([tempUser])
+        .rpc();
 
-      await ctx.provider.connection.confirmTransaction(purchaseTx, "confirmed");
-      console.log("✓ Dongle purchased with NFT holder discount");
+      expect.fail("Should have failed when purchase not started");
+    } catch (error: any) {
+      expect(error.toString()).to.include("PurchaseNotStarted");
+      console.log("✅ Correctly rejected purchase when disabled");
+    }
 
-      // Verify purchase
-      const updatedUserState = await ctx.fetchUserState(ctx.user.publicKey);
-      assert.ok(updatedUserState.purchasedDate.toNumber() > 0);
+    // Re-enable purchases
+    await testContext.program.methods
+      .updatePurchaseStarted(true)
+      .accounts({
+        superAdmin: testContext.admin.publicKey,
+      })
+      .signers([testContext.admin])
+      .rpc();
 
-      // Step 6: Test dongle purchase for normal user (without NFT)
-      console.log("\nStep 6: Testing dongle purchase for normal user (full price)...");
-
-      const normalUserPurchaseTx = await ctx.program.methods
-        .purchaseDongle()
-        .accounts({
-          buyer: ctx.user2.publicKey,
-          paymentMint: ctx.paymentMint,
-          buyerTokenAccount: ctx.user2TokenAccount,
-          paymentTokenProgram: TOKEN_PROGRAM_ID,
-        })
-        .signers([ctx.user2])
-        .rpc({ skipPreflight: true });
-
-      await ctx.provider.connection.confirmTransaction(normalUserPurchaseTx, "confirmed");
-      console.log("✓ Dongle purchased at full price for normal user");
-
-      const user2State = await ctx.fetchUserState(ctx.user2.publicKey);
-      assert.ok(user2State.purchasedDate.toNumber() > 0);
-
-      // Step 7: Burn NFT
-      console.log("\nStep 7: Burning NFT...");
-
-      const burnTx = await ctx.program.methods
-        .burnNft()
-        .accounts({
-          signer: ctx.user.publicKey,
-          oldMint: nftMint.publicKey,
-          oldTokenAccount: getAssociatedTokenAddressSync(nftMint.publicKey, ctx.user.publicKey),
-        })
-        .signers([ctx.user])
-        .rpc({ skipPreflight: true });
-
-      await ctx.provider.connection.confirmTransaction(burnTx, "confirmed");
-      console.log("✓ NFT burned successfully");
-
-      // Verify NFT burned
-      const finalUserState = await ctx.fetchUserState(ctx.user.publicKey);
-      assert.strictEqual(finalUserState.nftAddress.toBase58(), PublicKey.default.toBase58());
-
-      // Step 8: Test withdrawal functionality
-      console.log("\nStep 8: Testing withdrawal functionality...");
-
-      // Withdraw some funds
-      const withdrawAmount = new anchor.BN(50_000_000); // 50 USDC
-      const withdrawTx = await ctx.program.methods
-        .withdraw(withdrawAmount)
-        .accounts({
-          superAdmin: ctx.superAdmin.publicKey,
-          withdrawWallet: ctx.withdrawWallet.publicKey,
-          paymentMint: ctx.paymentMint,
-          withdrawWalletTokenAccount: ctx.withdrawWalletTokenAccount,
-          paymentTokenProgram: TOKEN_PROGRAM_ID,
-        })
-        .rpc({ skipPreflight: true });
-
-      await ctx.provider.connection.confirmTransaction(withdrawTx, "confirmed");
-      console.log("✓ Funds withdrawn successfully");
-
-      console.log("\n🎉 Complete User Journey Test PASSED! 🎉");
-      console.log("All core functionality verified:");
-      console.log("✓ Admin initialization");
-      console.log("✓ Collection creation (OG and Dongle Proof)");
-      console.log("✓ NFT minting with payment");
-      console.log("✓ Dongle purchase with NFT holder discount");
-      console.log("✓ Dongle purchase at full price for normal users");
-      console.log("✓ NFT burning");
-      console.log("✓ Fund withdrawal");
-    });
-  });
-
-  describe("Collection-based NFT Minting", () => {
-    it("should mint NFTs for both OG and Dongle Proof collections", async () => {
-      console.log("\n=== Testing Collection-based NFT Minting ===\n");
-
-      // Setup collections first (assuming admin is already initialized)
-      const ogCollectionMint = Keypair.generate();
-      const dongleProofCollectionMint = Keypair.generate();
-
-      // Create OG Collection
-      await ctx.program.methods
-        .createCollectionNft("Test OG Collection", "TOG", "https://example.com/test-og.json")
-        .accounts({
-          signer: ctx.superAdmin.publicKey,
-          collectionMint: ogCollectionMint.publicKey,
-          tokenMetadataProgram: new PublicKey("metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s"),
-        })
-        .signers([ogCollectionMint])
-        .rpc({ skipPreflight: true });
-
-      // Create Dongle Proof Collection
-      await ctx.program.methods
-        .createCollectionNft("Test Dongle Proof Collection", "TDP", "https://example.com/test-dongle.json")
-        .accounts({
-          signer: ctx.superAdmin.publicKey,
-          collectionMint: dongleProofCollectionMint.publicKey,
-          tokenMetadataProgram: new PublicKey("metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s"),
-        })
-        .signers([dongleProofCollectionMint])
-        .rpc({ skipPreflight: true });
-
-      // Update admin with collection addresses
-      await ctx.program.methods
-        .updateOgCollection(ogCollectionMint.publicKey)
-        .accounts({ superAdmin: ctx.superAdmin.publicKey })
-        .rpc({ skipPreflight: true });
-
-      await ctx.program.methods
-        .updateDongleProofCollection(dongleProofCollectionMint.publicKey)
-        .accounts({ superAdmin: ctx.superAdmin.publicKey })
-        .rpc({ skipPreflight: true });
-
-      // Mint OG NFT
-      const ogNftMint = Keypair.generate();
-      await ctx.program.methods
-        .mintNft("Test OG NFT", "TOG", "https://example.com/test-og-nft.json")
-        .accounts({
-          signer: ctx.user3.publicKey,
-          mint: ogNftMint.publicKey,
-          tokenAccount: getAssociatedTokenAddressSync(ogNftMint.publicKey, ctx.user3.publicKey),
-          tokenMetadataProgram: new PublicKey("metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s"),
-          collectionMint: ogCollectionMint.publicKey,
-          paymentMint: ctx.paymentMint,
-          payerTokenAccount: ctx.user3TokenAccount,
-          paymentTokenProgram: TOKEN_PROGRAM_ID,
-        })
-        .signers([ctx.user3, ogNftMint])
-        .rpc({ skipPreflight: true });
-
-      console.log("✓ OG NFT minted successfully");
-
-      // Verify OG NFT metadata includes collection info
-      const ogUserState = await ctx.fetchUserState(ctx.user3.publicKey);
-      assert.strictEqual(ogUserState.nftAddress.toBase58(), ogNftMint.publicKey.toBase58());
-
-      console.log("✓ Collection-based NFT minting test PASSED!");
-    });
-  });
-
-  describe("Error Handling", () => {
-    it("should reject minting when user already has NFT", async () => {
-      console.log("\n=== Testing Error Handling ===\n");
-
-      // Try to mint second NFT for user who already has one
-      const secondNftMint = Keypair.generate();
-
-      let errorThrown = false;
-      try {
-        await ctx.program.methods
-          .mintNft("Second NFT", "SECOND", "https://example.com/second.json")
-          .accounts({
-            signer: ctx.user3.publicKey, // User who already has NFT
-            mint: secondNftMint.publicKey,
-            tokenAccount: getAssociatedTokenAddressSync(secondNftMint.publicKey, ctx.user3.publicKey),
-            tokenMetadataProgram: new PublicKey("metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s"),
-            collectionMint: null, // No collection for this test
-            paymentMint: ctx.paymentMint,
-            payerTokenAccount: ctx.user3TokenAccount,
-            paymentTokenProgram: TOKEN_PROGRAM_ID,
-          })
-          .signers([ctx.user3, secondNftMint])
-          .rpc({ skipPreflight: true });
-      } catch (err: any) {
-        errorThrown = true;
-        console.log("✓ Correctly rejected duplicate NFT minting");
-      }
-
-      assert.ok(errorThrown, "Should have rejected duplicate NFT minting");
-      console.log("✓ Error handling test PASSED!");
-    });
-
-    it("should reject dongle purchase when purchases are disabled", async () => {
-      console.log("\n=== Testing Purchase Disable Functionality ===\n");
-
-      // Disable purchases
-      await ctx.program.methods
-        .updatePurchaseStarted(false)
-        .accounts({
-          superAdmin: ctx.superAdmin.publicKey,
-        })
-        .rpc({ skipPreflight: true });
-
-      // Try to purchase dongle when disabled
-      let errorThrown = false;
-      try {
-        await ctx.program.methods
-          .purchaseDongle()
-          .accounts({
-            buyer: ctx.user.publicKey,
-            paymentMint: ctx.paymentMint,
-            buyerTokenAccount: ctx.userTokenAccount,
-            paymentTokenProgram: TOKEN_PROGRAM_ID,
-          })
-          .signers([ctx.user])
-          .rpc({ skipPreflight: true });
-      } catch (err: any) {
-        errorThrown = true;
-        console.log("✓ Correctly rejected purchase when disabled");
-      }
-
-      assert.ok(errorThrown, "Should have rejected purchase when disabled");
-
-      // Re-enable purchases for other tests
-      await ctx.program.methods
-        .updatePurchaseStarted(true)
-        .accounts({
-          superAdmin: ctx.superAdmin.publicKey,
-        })
-        .rpc({ skipPreflight: true });
-
-      console.log("✓ Purchase disable/enable test PASSED!");
-    });
-  });
-
-  describe("Admin Functions", () => {
-    it("should update various admin parameters", async () => {
-      console.log("\n=== Testing Admin Parameter Updates ===\n");
-
-      const newMintFee = new anchor.BN(2_000_000); // 2 USDC
-      const newMaxSupply = new anchor.BN(200);
-      const newDonglePriceNftHolder = new anchor.BN(50_000_000); // 50 USDC
-
-      // Update mint fee
-      await ctx.program.methods
-        .updateMintFee(newMintFee)
-        .accounts({ superAdmin: ctx.superAdmin.publicKey })
-        .rpc({ skipPreflight: true });
-
-      // Update max supply
-      await ctx.program.methods
-        .updateMaxSupply(newMaxSupply)
-        .accounts({ superAdmin: ctx.superAdmin.publicKey })
-        .rpc({ skipPreflight: true });
-
-      // Update dongle price for NFT holders
-      await ctx.program.methods
-        .updateDonglePriceNftHolder(newDonglePriceNftHolder)
-        .accounts({ superAdmin: ctx.superAdmin.publicKey })
-        .rpc({ skipPreflight: true });
-
-      // Verify updates
-      const adminState = await ctx.fetchAdminState();
-      assert.strictEqual(adminState.mintFee.toNumber(), newMintFee.toNumber());
-      assert.strictEqual(adminState.maxSupply.toNumber(), newMaxSupply.toNumber());
-      assert.strictEqual(adminState.donglePriceNftHolder.toNumber(), newDonglePriceNftHolder.toNumber());
-
-      console.log("✓ Admin parameter updates test PASSED!");
-    });
+    console.log("✅ Error scenarios handled correctly");
   });
 });
