@@ -21,12 +21,8 @@ describe("purchase_dongle", () => {
         )
         .accounts({
           superAdmin: testContext.admin.publicKey,
-          adminState: testContext.adminStatePda,
           paymentMint: testContext.usdcMint,
-          vault: testContext.vaultPda,
           paymentTokenProgram: TOKEN_PROGRAM_ID,
-          systemProgram: anchor.web3.SystemProgram.programId,
-          rent: anchor.web3.SYSVAR_RENT_PUBKEY,
         })
         .signers([testContext.admin])
         .rpc();
@@ -38,7 +34,6 @@ describe("purchase_dongle", () => {
       .updatePurchaseStarted(true)
       .accounts({
         superAdmin: testContext.admin.publicKey,
-        adminState: testContext.adminStatePda,
       })
       .signers([testContext.admin])
       .rpc();
@@ -48,7 +43,6 @@ describe("purchase_dongle", () => {
       .updateDonglePriceNftHolder(new anchor.BN(10000000)) // 10 USDC
       .accounts({
         superAdmin: testContext.admin.publicKey,
-        adminState: testContext.adminStatePda,
       })
       .signers([testContext.admin])
       .rpc();
@@ -57,13 +51,12 @@ describe("purchase_dongle", () => {
       .updateDonglePriceNormal(new anchor.BN(50000000)) // 50 USDC
       .accounts({
         superAdmin: testContext.admin.publicKey,
-        adminState: testContext.adminStatePda,
       })
       .signers([testContext.admin])
       .rpc();
   });
 
-  it("should allow non-NFT holder to purchase dongle at normal price", async () => {
+  it("should allow user to purchase dongle at normal price", async () => {
     // Create a new user for this test
     const newUser = Keypair.generate();
     await testContext.connection.confirmTransaction(
@@ -91,27 +84,18 @@ describe("purchase_dongle", () => {
     const vaultBalanceBefore = await testContext.getVaultBalance();
 
     // Purchase dongle
-    const [userStatePda] = testContext.getUserStatePda(newUser.publicKey);
     const tx = await testContext.program.methods
       .purchaseDongle()
       .accounts({
         buyer: newUser.publicKey,
-        adminState: testContext.adminStatePda,
-        userState: userStatePda,
         paymentMint: testContext.usdcMint,
         buyerTokenAccount: newUserUsdcAccount,
-        vault: testContext.vaultPda,
         paymentTokenProgram: TOKEN_PROGRAM_ID,
-        systemProgram: anchor.web3.SystemProgram.programId,
       })
       .signers([newUser])
       .rpc();
 
     expect(tx).to.be.a("string");
-
-    // Verify user state was updated
-    const userStateAfter = await testContext.fetchUserState(newUser.publicKey);
-    expect(userStateAfter.purchasedDate.toNumber()).to.be.greaterThan(0);
 
     // Verify payment was transferred to vault
     const vaultBalanceAfter = await testContext.getVaultBalance();
@@ -120,13 +104,70 @@ describe("purchase_dongle", () => {
     expect(vaultBalanceAfter).to.equal(vaultBalanceBefore + expectedPrice);
   });
 
+  it("should allow user to purchase multiple dongles", async () => {
+    // Create a new user for this test
+    const newUser = Keypair.generate();
+    await testContext.connection.confirmTransaction(
+      await testContext.connection.requestAirdrop(newUser.publicKey, 5 * anchor.web3.LAMPORTS_PER_SOL)
+    );
+
+    // Create and fund USDC account with enough for 2 purchases
+    const newUserUsdcAccount = await createAssociatedTokenAccount(
+      testContext.connection,
+      testContext.admin,
+      testContext.usdcMint,
+      newUser.publicKey
+    );
+
+    await mintTo(
+      testContext.connection,
+      testContext.admin,
+      testContext.usdcMint,
+      newUserUsdcAccount,
+      testContext.admin,
+      200000000 // 200 USDC
+    );
+
+    // Get vault balance before purchases
+    const vaultBalanceBefore = await testContext.getVaultBalance();
+    const adminState = await testContext.fetchAdminState();
+    const expectedPrice = BigInt(adminState.donglePriceNormal.toString());
+
+    // First purchase
+    await testContext.program.methods
+      .purchaseDongle()
+      .accounts({
+        buyer: newUser.publicKey,
+        paymentMint: testContext.usdcMint,
+        buyerTokenAccount: newUserUsdcAccount,
+        paymentTokenProgram: TOKEN_PROGRAM_ID,
+      })
+      .signers([newUser])
+      .rpc();
+
+    // Second purchase - should also succeed
+    await testContext.program.methods
+      .purchaseDongle()
+      .accounts({
+        buyer: newUser.publicKey,
+        paymentMint: testContext.usdcMint,
+        buyerTokenAccount: newUserUsdcAccount,
+        paymentTokenProgram: TOKEN_PROGRAM_ID,
+      })
+      .signers([newUser])
+      .rpc();
+
+    // Verify both payments were transferred to vault
+    const vaultBalanceAfter = await testContext.getVaultBalance();
+    expect(vaultBalanceAfter).to.equal(vaultBalanceBefore + expectedPrice * BigInt(2));
+  });
+
   it("should fail when purchase is not started", async () => {
     // Disable purchase started
     await testContext.program.methods
       .updatePurchaseStarted(false)
       .accounts({
         superAdmin: testContext.admin.publicKey,
-        adminState: testContext.adminStatePda,
       })
       .signers([testContext.admin])
       .rpc();
@@ -152,20 +193,14 @@ describe("purchase_dongle", () => {
       100000000 // 100 USDC
     );
 
-    const [userStatePda] = testContext.getUserStatePda(newUser.publicKey);
-
     try {
       await testContext.program.methods
         .purchaseDongle()
         .accounts({
           buyer: newUser.publicKey,
-          adminState: testContext.adminStatePda,
-          userState: userStatePda,
           paymentMint: testContext.usdcMint,
           buyerTokenAccount: newUserUsdcAccount,
-          vault: testContext.vaultPda,
           paymentTokenProgram: TOKEN_PROGRAM_ID,
-          systemProgram: anchor.web3.SystemProgram.programId,
         })
         .signers([newUser])
         .rpc();
@@ -180,7 +215,6 @@ describe("purchase_dongle", () => {
       .updatePurchaseStarted(true)
       .accounts({
         superAdmin: testContext.admin.publicKey,
-        adminState: testContext.adminStatePda,
       })
       .signers([testContext.admin])
       .rpc();
@@ -217,77 +251,27 @@ describe("purchase_dongle", () => {
       100000000
     );
 
-    const [userStatePda] = testContext.getUserStatePda(newUser.publicKey);
-
-    // Try with the wrong payment mint but correct vault (should fail constraint check)
+    // Try with the wrong payment mint (should fail constraint check)
     try {
       await testContext.program.methods
         .purchaseDongle()
         .accounts({
           buyer: newUser.publicKey,
-          adminState: testContext.adminStatePda,
-          userState: userStatePda,
           paymentMint: differentMint, // Wrong mint - constraint will fail
           buyerTokenAccount: newUserTokenAccount,
-          vault: testContext.vaultPda, // Use actual vault
           paymentTokenProgram: TOKEN_PROGRAM_ID,
-          systemProgram: anchor.web3.SystemProgram.programId,
         })
         .signers([newUser])
         .rpc();
 
       expect.fail("Expected transaction to fail with invalid payment mint");
     } catch (error: any) {
-      // The constraint check will fail because payment_mint doesn't match admin_state.payment_mint
-      expect(error.toString()).to.include("InvalidPaymentMint");
+      // The constraint check will fail - either InvalidPaymentMint or vault seed constraint
+      expect(error).to.exist;
+      expect(
+        error.toString().includes("InvalidPaymentMint") || 
+        error.toString().includes("vault")
+      ).to.be.true;
     }
-  });
-
-  it("should create user state if it doesn't exist", async () => {
-    const newUser = Keypair.generate();
-    await testContext.connection.confirmTransaction(
-      await testContext.connection.requestAirdrop(newUser.publicKey, 5 * anchor.web3.LAMPORTS_PER_SOL)
-    );
-
-    const newUserUsdcAccount = await createAssociatedTokenAccount(
-      testContext.connection,
-      testContext.admin,
-      testContext.usdcMint,
-      newUser.publicKey
-    );
-
-    await mintTo(
-      testContext.connection,
-      testContext.admin,
-      testContext.usdcMint,
-      newUserUsdcAccount,
-      testContext.admin,
-      100000000 // 100 USDC
-    );
-
-    const [userStatePda] = testContext.getUserStatePda(newUser.publicKey);
-
-    // Purchase should create user state
-    const tx = await testContext.program.methods
-      .purchaseDongle()
-      .accounts({
-        buyer: newUser.publicKey,
-        adminState: testContext.adminStatePda,
-        userState: userStatePda,
-        paymentMint: testContext.usdcMint,
-        buyerTokenAccount: newUserUsdcAccount,
-        vault: testContext.vaultPda,
-        paymentTokenProgram: TOKEN_PROGRAM_ID,
-        systemProgram: anchor.web3.SystemProgram.programId,
-      })
-      .signers([newUser])
-      .rpc();
-
-    expect(tx).to.be.a("string");
-
-    // Verify user state was created
-    const userState = await testContext.fetchUserState(newUser.publicKey);
-    expect(userState.purchasedDate.toNumber()).to.be.greaterThan(0);
-    expect(userState.nftAddress.toString()).to.equal(PublicKey.default.toString());
   });
 });

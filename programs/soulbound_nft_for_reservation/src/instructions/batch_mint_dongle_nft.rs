@@ -41,15 +41,6 @@ pub struct BatchMintDongleNft<'info> {
     )]
     pub admin_state: Box<Account<'info, AdminState>>,
 
-    #[account(
-        init_if_needed,
-        seeds = [b"user_state".as_ref(), signer.key().as_ref()],
-        bump,
-        payer = signer,
-        space = UserState::space()
-    )]
-    pub user_state: Box<Account<'info, UserState>>,
-
     // === Payment token accounts ===
     /// The SPL token mint for payment (e.g., USDC) - must match admin_state.payment_mint
     #[account(

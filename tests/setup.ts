@@ -178,14 +178,6 @@ class TestContext {
     await this.connection.confirmTransaction(signature);
   }
 
-  // Helper to get user state PDA
-  public getUserStatePda(userPubkey: PublicKey): [PublicKey, number] {
-    return PublicKey.findProgramAddressSync(
-      [Buffer.from("user_state"), userPubkey.toBuffer()],
-      this.program.programId
-    );
-  }
-
   // Helper to get metadata PDA (Metaplex standard)
   public getMetadataPda(mint: PublicKey): [PublicKey, number] {
     return PublicKey.findProgramAddressSync(
@@ -214,12 +206,6 @@ class TestContext {
   // Helper to fetch admin state
   public async fetchAdminState(): Promise<any> {
     return await this.program.account.adminState.fetch(this.adminStatePda);
-  }
-
-  // Helper to fetch user state
-  public async fetchUserState(userPubkey: PublicKey): Promise<any> {
-    const [userStatePda] = this.getUserStatePda(userPubkey);
-    return await this.program.account.userState.fetch(userStatePda);
   }
 
   // Helper to fetch collection state

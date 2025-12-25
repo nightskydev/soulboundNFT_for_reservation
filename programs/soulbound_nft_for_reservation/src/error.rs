@@ -6,10 +6,6 @@ pub enum ProgramErrorCode {
     InvalidMintAccountSpace,
     #[msg("Cant initialize metadata_pointer")]
     CantInitializeMetadataPointer,
-    #[msg("User does not own this NFT")]
-    UserDoesNotOwnNft,
-    #[msg("User already has an NFT")]
-    UserAlreadyHasNft,
     #[msg("Invalid token account")]
     InvalidTokenAccount,
     #[msg("Reserved count underflow")]
@@ -36,8 +32,6 @@ pub enum ProgramErrorCode {
     PurchaseNotStarted,
     #[msg("Max supply cannot be less than current reserved count")]
     InvalidMaxSupply,
-    #[msg("User has already purchased a dongle")]
-    AlreadyPurchased,
     #[msg("Invalid super admin - cannot be empty")]
     InvalidSuperAdmin,
     #[msg("Reserved count overflow")]

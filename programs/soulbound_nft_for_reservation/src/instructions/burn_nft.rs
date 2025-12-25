@@ -28,30 +28,12 @@ pub struct BurnNft<'info> {
         bump,
     )]
     pub admin_state: Box<Account<'info, AdminState>>,
-    #[account(
-        mut,
-        seeds = [b"user_state".as_ref(), signer.key().as_ref()],
-        bump,
-    )]
-    pub user_state: Box<Account<'info, UserState>>,
 }
 
 pub fn handler(ctx: Context<BurnNft>) -> Result<()> {
     msg!("Burn NFT process started");
 
-    // Validate that user_state is not empty (has an NFT)
-    require!(
-        ctx.accounts.user_state.nft_address != Pubkey::default(),
-        ProgramErrorCode::UserDoesNotOwnNft
-    );
-
-    // Validate that the user owns this NFT
-    require!(
-        ctx.accounts.user_state.nft_address == ctx.accounts.old_mint.key(),
-        ProgramErrorCode::UserDoesNotOwnNft
-    );
-
-    // Validate that old_token_account is the correct associated token account
+    // Validate that old_token_account is the correct associated token account for the signer
     let expected_ata = get_associated_token_address_with_program_id(
         &ctx.accounts.signer.key(),
         &ctx.accounts.old_mint.key(),
@@ -91,9 +73,6 @@ pub fn handler(ctx: Context<BurnNft>) -> Result<()> {
 
     // Note: SPL Token mints cannot be closed. The mint account remains on-chain
     // with supply = 0. This is standard behavior for NFT burns on Solana.
-
-    // Clear user's NFT address
-    ctx.accounts.user_state.nft_address = Pubkey::default();
     
     // Decrement reserved count with underflow protection
     ctx.accounts.admin_state.current_reserved_count = ctx.accounts.admin_state

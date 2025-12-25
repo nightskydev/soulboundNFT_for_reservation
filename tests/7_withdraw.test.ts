@@ -90,18 +90,13 @@ describe("withdraw", () => {
     );
 
     // Make a purchase to add funds to vault
-    const [tempUserStatePda] = testContext.getUserStatePda(tempUser.publicKey);
     await testContext.program.methods
       .purchaseDongle()
       .accounts({
         buyer: tempUser.publicKey,
-        adminState: testContext.adminStatePda,
-        userState: tempUserStatePda,
         paymentMint: testContext.usdcMint,
         buyerTokenAccount: tempUserUsdcAccount,
-        vault: testContext.vaultPda,
         paymentTokenProgram: TOKEN_PROGRAM_ID,
-        systemProgram: anchor.web3.SystemProgram.programId,
       })
       .signers([tempUser])
       .rpc();
@@ -169,18 +164,13 @@ describe("withdraw", () => {
         50000000 // 50 USDC
       );
 
-      const [tempUserStatePda] = testContext.getUserStatePda(tempUser.publicKey);
       await testContext.program.methods
         .purchaseDongle()
         .accounts({
           buyer: tempUser.publicKey,
-          adminState: testContext.adminStatePda,
-          userState: tempUserStatePda,
           paymentMint: testContext.usdcMint,
           buyerTokenAccount: tempUserUsdcAccount,
-          vault: testContext.vaultPda,
           paymentTokenProgram: TOKEN_PROGRAM_ID,
-          systemProgram: anchor.web3.SystemProgram.programId,
         })
         .signers([tempUser])
         .rpc();
@@ -329,18 +319,13 @@ describe("withdraw", () => {
       50000000 // 50 USDC
     );
 
-    const [tempUserStatePda] = testContext.getUserStatePda(tempUser.publicKey);
     await testContext.program.methods
       .purchaseDongle()
       .accounts({
         buyer: tempUser.publicKey,
-        adminState: testContext.adminStatePda,
-        userState: tempUserStatePda,
         paymentMint: testContext.usdcMint,
         buyerTokenAccount: tempUserUsdcAccount,
-        vault: testContext.vaultPda,
         paymentTokenProgram: TOKEN_PROGRAM_ID,
-        systemProgram: anchor.web3.SystemProgram.programId,
       })
       .signers([tempUser])
       .rpc();

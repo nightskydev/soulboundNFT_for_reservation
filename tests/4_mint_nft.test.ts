@@ -5,6 +5,7 @@ import { Keypair, PublicKey, ComputeBudgetProgram } from "@solana/web3.js";
 import { TOKEN_PROGRAM_ID, getAssociatedTokenAddressSync, mintTo, getAccount } from "@solana/spl-token";
 
 const METAPLEX_PROGRAM_ID = new PublicKey("metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s");
+const SYSVAR_INSTRUCTIONS_PUBKEY = new PublicKey("Sysvar1nstructions1111111111111111111111111");
 
 describe("mint_nft", () => {
   let user1NftMint: Keypair;
@@ -56,8 +57,6 @@ describe("mint_nft", () => {
   it("should mint NFT successfully without collection", async () => {
     user1NftMint = Keypair.generate();
     
-    const [userState] = testContext.getUserStatePda(testContext.user1.keypair.publicKey);
-    
     const nftTokenAccount = getAssociatedTokenAddressSync(
       user1NftMint.publicKey,
       testContext.user1.keypair.publicKey
@@ -89,15 +88,13 @@ describe("mint_nft", () => {
         payerTokenAccount: testContext.user1.tokenAccount,
         paymentTokenProgram: TOKEN_PROGRAM_ID,
         collectionMint: null,
+        collectionMetadata: null,
+        collectionMasterEdition: null,
+        sysvarInstructions: null,
       })
       .preInstructions([modifyComputeUnits])
       .signers([testContext.user1.keypair, user1NftMint])
       .rpc();
-
-    // Verify user state
-    const userStateData = await testContext.program.account.userState.fetch(userState);
-    expect(userStateData.nftAddress.toString()).to.equal(user1NftMint.publicKey.toString());
-    expect(userStateData.nftMintDate.toNumber()).to.be.greaterThan(0);
 
     // Verify NFT token account has 1 token
     const tokenAccountInfo = await getAccount(testContext.provider.connection, nftTokenAccount);
@@ -190,6 +187,16 @@ describe("mint_nft", () => {
       units: 400_000,
     });
 
+    // Derive collection metadata and master edition PDAs
+    const [collectionMetadataAccount] = PublicKey.findProgramAddressSync(
+      [Buffer.from("metadata"), METAPLEX_PROGRAM_ID.toBuffer(), testContext.ogCollectionMint!.toBuffer()],
+      METAPLEX_PROGRAM_ID
+    );
+    const [collectionMasterEditionAccount] = PublicKey.findProgramAddressSync(
+      [Buffer.from("metadata"), METAPLEX_PROGRAM_ID.toBuffer(), testContext.ogCollectionMint!.toBuffer(), Buffer.from("edition")],
+      METAPLEX_PROGRAM_ID
+    );
+
     await testContext.program.methods
       .mintNft("OG NFT", "OGNFT", "https://example.com/og-nft.json")
       .accounts({
@@ -202,28 +209,30 @@ describe("mint_nft", () => {
         payerTokenAccount: testContext.user2.tokenAccount,
         paymentTokenProgram: TOKEN_PROGRAM_ID,
         collectionMint: testContext.ogCollectionMint,
+        collectionMetadata: collectionMetadataAccount,
+        collectionMasterEdition: collectionMasterEditionAccount,
+        sysvarInstructions: SYSVAR_INSTRUCTIONS_PUBKEY,
       })
       .preInstructions([modifyComputeUnits])
       .signers([testContext.user2.keypair, user2NftMint])
       .rpc();
 
-    // Verify user2 state
-    const [user2State] = testContext.getUserStatePda(testContext.user2.keypair.publicKey);
-    const userStateData = await testContext.program.account.userState.fetch(user2State);
-    expect(userStateData.nftAddress.toString()).to.equal(user2NftMint.publicKey.toString());
+    // Verify NFT was minted successfully
+    const tokenAccountInfo = await getAccount(testContext.provider.connection, nftTokenAccount);
+    expect(Number(tokenAccountInfo.amount)).to.equal(1);
   });
 
-  it("should fail when user already has an NFT", async () => {
-    const newMint = Keypair.generate();
+  it("should allow user to mint multiple NFTs", async () => {
+    const secondMint = Keypair.generate();
     
     const nftTokenAccount = getAssociatedTokenAddressSync(
-      newMint.publicKey,
+      secondMint.publicKey,
       testContext.user1.keypair.publicKey
     );
 
     // Derive metadata PDA
-    const [newMetadataAccount] = PublicKey.findProgramAddressSync(
-      [Buffer.from("metadata"), METAPLEX_PROGRAM_ID.toBuffer(), newMint.publicKey.toBuffer()],
+    const [metadataAccount] = PublicKey.findProgramAddressSync(
+      [Buffer.from("metadata"), METAPLEX_PROGRAM_ID.toBuffer(), secondMint.publicKey.toBuffer()],
       METAPLEX_PROGRAM_ID
     );
 
@@ -231,34 +240,34 @@ describe("mint_nft", () => {
       units: 400_000,
     });
 
-    try {
-      await testContext.program.methods
-        .mintNft("Second NFT", "SNFT", "https://example.com/second.json")
-        .accounts({
-          signer: testContext.user1.keypair.publicKey,
-          tokenAccount: nftTokenAccount,
-          mint: newMint.publicKey,
-          tokenMetadataProgram: METAPLEX_PROGRAM_ID,
-          metadataAccount: newMetadataAccount,
-          paymentMint: testContext.usdcMint,
-          payerTokenAccount: testContext.user1.tokenAccount,
-          paymentTokenProgram: TOKEN_PROGRAM_ID,
-          collectionMint: null,
-        })
-        .preInstructions([modifyComputeUnits])
-        .signers([testContext.user1.keypair, newMint])
-        .rpc();
-      
-      expect.fail("Should have thrown UserAlreadyHasNft error");
-    } catch (error: any) {
-      expect(error.toString()).to.include("UserAlreadyHasNft");
-    }
-  });
+    const reservedCountBefore = (await testContext.fetchAdminState()).currentReservedCount.toNumber();
 
-  it("should verify user state PDA derivation", async () => {
-    const [userStatePda] = testContext.getUserStatePda(testContext.user1.keypair.publicKey);
-    expect(userStatePda.toString()).to.be.a("string");
-    expect(userStatePda.toString().length).to.be.within(43, 44);
+    await testContext.program.methods
+      .mintNft("Second NFT", "SNFT", "https://example.com/second.json")
+      .accounts({
+        signer: testContext.user1.keypair.publicKey,
+        tokenAccount: nftTokenAccount,
+        mint: secondMint.publicKey,
+        tokenMetadataProgram: METAPLEX_PROGRAM_ID,
+        metadataAccount: metadataAccount,
+        paymentMint: testContext.usdcMint,
+        payerTokenAccount: testContext.user1.tokenAccount,
+        paymentTokenProgram: TOKEN_PROGRAM_ID,
+        collectionMint: null,
+        collectionMetadata: null,
+        collectionMasterEdition: null,
+      })
+      .preInstructions([modifyComputeUnits])
+      .signers([testContext.user1.keypair, secondMint])
+      .rpc();
+    
+    // Verify second NFT was minted
+    const tokenAccountInfo = await getAccount(testContext.provider.connection, nftTokenAccount);
+    expect(Number(tokenAccountInfo.amount)).to.equal(1);
+
+    // Verify reserved count increased
+    const reservedCountAfter = (await testContext.fetchAdminState()).currentReservedCount.toNumber();
+    expect(reservedCountAfter).to.equal(reservedCountBefore + 1);
   });
 
   it("should verify metadata PDA derivation", async () => {

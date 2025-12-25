@@ -107,8 +107,7 @@ describe("Complete User Journey (Admin + Commerce)", () => {
 
     const vaultBalanceBefore = await testContext.getVaultBalance();
 
-    // New user purchases dongle at normal price (no NFT)
-    const [newUserStatePda] = testContext.getUserStatePda(newUser.publicKey);
+    // New user purchases dongle at normal price
     const purchaseTx = await testContext.program.methods
       .purchaseDongle()
       .accounts({
@@ -121,10 +120,6 @@ describe("Complete User Journey (Admin + Commerce)", () => {
       .rpc();
 
     console.log("✅ User purchased dongle:", purchaseTx);
-
-    // Verify user state
-    const userState = await testContext.fetchUserState(newUser.publicKey);
-    expect(userState.purchasedDate.toNumber()).to.be.greaterThan(0);
 
     // Verify vault balance increased
     const vaultBalanceAfter = await testContext.getVaultBalance();
@@ -219,8 +214,6 @@ describe("Complete User Journey (Admin + Commerce)", () => {
       testContext.admin,
       100000000 // 100 USDC
     );
-
-    const [tempUserStatePda] = testContext.getUserStatePda(tempUser.publicKey);
 
     try {
       await testContext.program.methods

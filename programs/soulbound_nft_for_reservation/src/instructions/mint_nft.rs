@@ -5,7 +5,10 @@ use anchor_spl::{
     token_interface::{TokenInterface, Mint as InterfaceMint, TokenAccount as InterfaceTokenAccount},
 };
 use mpl_token_metadata::{
-    instructions::{CreateMetadataAccountV3, CreateMetadataAccountV3InstructionArgs},
+    instructions::{
+        CreateMetadataAccountV3, CreateMetadataAccountV3InstructionArgs,
+        VerifyCollectionV1,
+    },
     types::{DataV2, Creator},
 };
 use solana_program::program::invoke_signed;
@@ -59,14 +62,6 @@ pub struct MintNft<'info> {
     )]
     pub admin_state: Box<Account<'info, AdminState>>,
     
-    #[account(
-        init_if_needed,
-        seeds = [b"user_state".as_ref(), signer.key().as_ref()],
-        bump,
-        payer = signer,
-        space = UserState::space()
-    )]
-    pub user_state: Box<Account<'info, UserState>>,
 
     // === Payment token accounts ===
     /// The SPL token mint for payment (e.g., USDC) - must match admin_state.payment_mint
@@ -97,6 +92,17 @@ pub struct MintNft<'info> {
     // === Optional Collection ===
     /// CHECK: Optional collection mint account for grouping NFTs
     pub collection_mint: Option<UncheckedAccount<'info>>,
+
+    /// CHECK: Optional collection metadata account - required if collection_mint is provided
+    #[account(mut)]
+    pub collection_metadata: Option<UncheckedAccount<'info>>,
+
+    /// CHECK: Optional collection master edition account - required if collection_mint is provided
+    pub collection_master_edition: Option<UncheckedAccount<'info>>,
+
+    /// CHECK: Sysvar instructions account - required for collection verification
+    #[account(address = solana_program::sysvar::instructions::ID)]
+    pub sysvar_instructions: Option<UncheckedAccount<'info>>,
 }
 
 #[inline(never)]
@@ -164,6 +170,48 @@ fn create_nft_metadata<'info>(
     Ok(())
 }
 
+#[inline(never)]
+fn verify_collection<'info>(
+    metadata_account: &AccountInfo<'info>,
+    collection_mint: &AccountInfo<'info>,
+    collection_metadata: &AccountInfo<'info>,
+    collection_master_edition: &AccountInfo<'info>,
+    admin_state: &AccountInfo<'info>,
+    system_program: &AccountInfo<'info>,
+    sysvar_instructions: &AccountInfo<'info>,
+    signer_seeds: &[&[&[u8]]],
+) -> Result<()> {
+    let verify_collection_ix = VerifyCollectionV1 {
+        authority: admin_state.key(),
+        delegate_record: None,
+        metadata: metadata_account.key(),
+        collection_mint: collection_mint.key(),
+        collection_metadata: Some(collection_metadata.key()),
+        collection_master_edition: Some(collection_master_edition.key()),
+        system_program: system_program.key(),
+        sysvar_instructions: sysvar_instructions.key(),
+    };
+
+    let ix = verify_collection_ix.instruction();
+
+    invoke_signed(
+        &ix,
+        &[
+            admin_state.clone(),
+            metadata_account.clone(),
+            collection_mint.clone(),
+            collection_metadata.clone(),
+            collection_master_edition.clone(),
+            system_program.clone(),
+            sysvar_instructions.clone(),
+        ],
+        signer_seeds,
+    )?;
+
+    msg!("Collection verified successfully");
+    Ok(())
+}
+
 pub fn handler(ctx: Context<MintNft>, name: String, symbol: String, uri: String) -> Result<()> {
     msg!("Mint regular NFT with Metaplex metadata");
 
@@ -176,12 +224,6 @@ pub fn handler(ctx: Context<MintNft>, name: String, symbol: String, uri: String)
             ProgramErrorCode::MintNotStarted
         );
     }
-
-    // Validate that user doesn't already have an NFT
-    require!(
-        ctx.accounts.user_state.nft_address == Pubkey::default(),
-        ProgramErrorCode::UserAlreadyHasNft
-    );
 
     // Check max supply (0 = unlimited)
     let max_supply = ctx.accounts.admin_state.max_supply;
@@ -212,6 +254,30 @@ pub fn handler(ctx: Context<MintNft>, name: String, symbol: String, uri: String)
         collection_key,
         signer_seeds,
     )?;
+
+    // Verify collection if provided
+    if let (
+        Some(collection_mint),
+        Some(collection_metadata),
+        Some(collection_master_edition),
+        Some(sysvar_instructions),
+    ) = (
+        &ctx.accounts.collection_mint,
+        &ctx.accounts.collection_metadata,
+        &ctx.accounts.collection_master_edition,
+        &ctx.accounts.sysvar_instructions,
+    ) {
+        verify_collection(
+            &ctx.accounts.metadata_account.to_account_info(),
+            &collection_mint.to_account_info(),
+            &collection_metadata.to_account_info(),
+            &collection_master_edition.to_account_info(),
+            &ctx.accounts.admin_state.to_account_info(),
+            &ctx.accounts.system_program.to_account_info(),
+            &sysvar_instructions.to_account_info(),
+            signer_seeds,
+        )?;
+    }
 
     // Create the associated token account
     associated_token::create(CpiContext::new(
@@ -261,11 +327,7 @@ pub fn handler(ctx: Context<MintNft>, name: String, symbol: String, uri: String)
         ctx.accounts.payment_mint.decimals,
     )?;
 
-    // Store user's info
-    let clock = Clock::get()?;
-    ctx.accounts.user_state.nft_address = ctx.accounts.mint.key();
-    ctx.accounts.user_state.nft_mint_date = clock.unix_timestamp;
-
+    // Increment reserved count
     ctx.accounts.admin_state.current_reserved_count = ctx.accounts.admin_state
         .current_reserved_count
         .checked_add(1)
@@ -280,7 +342,7 @@ pub fn handler(ctx: Context<MintNft>, name: String, symbol: String, uri: String)
     emit!(MintNftEvent {
         user: ctx.accounts.signer.key(),
         mint_address: ctx.accounts.mint.key(),
-        timestamp: clock.unix_timestamp,
+        timestamp: Clock::get()?.unix_timestamp,
     });
 
     Ok(())

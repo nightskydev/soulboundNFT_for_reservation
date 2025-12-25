@@ -15,16 +15,6 @@ pub struct PurchaseDongle<'info> {
     )]
     pub admin_state: Box<Account<'info, AdminState>>,
 
-    /// User state to check if buyer has an NFT (created if not exists)
-    #[account(
-        init_if_needed,
-        seeds = [b"user_state".as_ref(), buyer.key().as_ref()],
-        bump,
-        payer = buyer,
-        space = UserState::space()
-    )]
-    pub user_state: Box<Account<'info, UserState>>,
-
     // === Payment token accounts ===
     /// The SPL token mint for payment (e.g., USDC) - must match admin_state.payment_mint
     #[account(
@@ -66,22 +56,8 @@ pub fn handler(ctx: Context<PurchaseDongle>) -> Result<()> {
         ProgramErrorCode::PurchaseNotStarted
     );
 
-    // Check if user has already purchased a dongle
-    require!(
-        ctx.accounts.user_state.purchased_date == 0,
-        ProgramErrorCode::AlreadyPurchased
-    );
-
-    // Determine price based on whether user has a soulbound NFT
-    let is_nft_holder = ctx.accounts.user_state.nft_address != Pubkey::default();
-    
-    let price = if is_nft_holder {
-        msg!("User is NFT holder - applying discounted price");
-        ctx.accounts.admin_state.dongle_price_nft_holder
-    } else {
-        msg!("User is not NFT holder - applying normal price");
-        ctx.accounts.admin_state.dongle_price_normal
-    };
+    // Use normal price for all purchases
+    let price = ctx.accounts.admin_state.dongle_price_normal;
 
     // Runtime validation: ensure price is valid (defense in depth)
     require!(price > 0, ProgramErrorCode::InvalidDonglePrice);
@@ -102,10 +78,6 @@ pub fn handler(ctx: Context<PurchaseDongle>) -> Result<()> {
         price,
         ctx.accounts.payment_mint.decimals,
     )?;
-
-    // Store the purchased date
-    let clock = Clock::get()?;
-    ctx.accounts.user_state.purchased_date = clock.unix_timestamp;
 
     msg!("Dongle purchase completed - {} tokens transferred to vault", price);
 
