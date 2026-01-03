@@ -19,8 +19,8 @@ import * as fs from "fs";
 import * as os from "os";
 
 // Configuration
-const NFT_NAME = "Soulbound OG NFT";
-const NFT_SYMBOL = "SBNFT";
+const NFT_NAME = "TEST NFT";
+const NFT_SYMBOL = "TEST";
 const NFT_URI = "https://green-awkward-eagle-887.mypinata.cloud/ipfs/bafkreifipgio6h5rspvmw2mm2f7zbfmktaku7nvsx7wf7rl7zlcw2mvfvu"; // Replace with your metadata URI
 
 const TOKEN_METADATA_PROGRAM_ID = new PublicKey("metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s");
@@ -152,13 +152,11 @@ async function main() {
   let collectionMint: PublicKey | null = null;
   let collectionMetadata: PublicKey | null = null;
   let collectionMasterEdition: PublicKey | null = null;
-  let sysvarInstructions: PublicKey | null = null;
   
   if (collectionMintAddress.toLowerCase() !== "null") {
     collectionMint = new PublicKey(collectionMintAddress);
     [collectionMetadata] = getMetadataPda(collectionMint);
     [collectionMasterEdition] = getMasterEditionPda(collectionMint);
-    sysvarInstructions = SYSVAR_INSTRUCTIONS_PUBKEY;
     console.log("\nCollection Mint:", collectionMint.toBase58());
     console.log("Collection Metadata:", collectionMetadata.toBase58());
     console.log("Collection Master Edition:", collectionMasterEdition.toBase58());

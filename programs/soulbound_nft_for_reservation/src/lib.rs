@@ -95,6 +95,10 @@ pub mod soulbound_nft_for_reservation {
         instructions::mint_nft::handler(ctx, name, symbol, uri)
     }
 
+    pub fn update_nft_metadata(ctx: Context<UpdateNftMetadata>, name: Option<String>, symbol: Option<String>, uri: Option<String>) -> Result<()> {
+        instructions::update_nft_metadata::handler(ctx, name, symbol, uri)
+    }
+
     pub fn burn_nft(ctx: Context<BurnNft>) -> Result<()> {
         instructions::burn_nft::handler(ctx)
     }

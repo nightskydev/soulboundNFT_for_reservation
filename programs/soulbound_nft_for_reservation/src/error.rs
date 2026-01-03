@@ -50,4 +50,6 @@ pub enum ProgramErrorCode {
     SameSuperAdmin,
     #[msg("Invalid collection address - cannot be empty")]
     InvalidCollection,
+    #[msg("Invalid metadata - name, symbol, and URI are required")]
+    InvalidMetadata,
 }

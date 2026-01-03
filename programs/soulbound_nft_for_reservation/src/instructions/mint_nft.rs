@@ -7,7 +7,7 @@ use anchor_spl::{
 use mpl_token_metadata::{
     instructions::{
         CreateMetadataAccountV3, CreateMetadataAccountV3InstructionArgs,
-        VerifyCollectionV1,
+        VerifyCollectionV1, VerifyCreatorV1,
     },
     types::{DataV2, Creator},
 };
@@ -100,9 +100,9 @@ pub struct MintNft<'info> {
     /// CHECK: Optional collection master edition account - required if collection_mint is provided
     pub collection_master_edition: Option<UncheckedAccount<'info>>,
 
-    /// CHECK: Sysvar instructions account - required for collection verification
+    /// CHECK: Sysvar instructions account - required for creator and collection verification
     #[account(address = solana_program::sysvar::instructions::ID)]
-    pub sysvar_instructions: Option<UncheckedAccount<'info>>,
+    pub sysvar_instructions: UncheckedAccount<'info>,
 }
 
 #[inline(never)]
@@ -212,6 +212,42 @@ fn verify_collection<'info>(
     Ok(())
 }
 
+#[inline(never)]
+fn verify_creator<'info>(
+    metadata_account: &AccountInfo<'info>,
+    admin_state: &AccountInfo<'info>,
+    system_program: &AccountInfo<'info>,
+    sysvar_instructions: &AccountInfo<'info>,
+    signer_seeds: &[&[&[u8]]],
+) -> Result<()> {
+    let verify_creator_ix = VerifyCreatorV1 {
+        authority: admin_state.key(),
+        delegate_record: None,
+        metadata: metadata_account.key(),
+        collection_mint: None,
+        collection_metadata: None,
+        collection_master_edition: None,
+        system_program: system_program.key(),
+        sysvar_instructions: sysvar_instructions.key(),
+    };
+
+    let ix = verify_creator_ix.instruction();
+
+    invoke_signed(
+        &ix,
+        &[
+            admin_state.clone(),
+            metadata_account.clone(),
+            system_program.clone(),
+            sysvar_instructions.clone(),
+        ],
+        signer_seeds,
+    )?;
+
+    msg!("Creator verified successfully");
+    Ok(())
+}
+
 pub fn handler(ctx: Context<MintNft>, name: String, symbol: String, uri: String) -> Result<()> {
     msg!("Mint regular NFT with Metaplex metadata");
 
@@ -255,17 +291,24 @@ pub fn handler(ctx: Context<MintNft>, name: String, symbol: String, uri: String)
         signer_seeds,
     )?;
 
+    // Verify creator (admin_state PDA is the creator)
+    verify_creator(
+        &ctx.accounts.metadata_account.to_account_info(),
+        &ctx.accounts.admin_state.to_account_info(),
+        &ctx.accounts.system_program.to_account_info(),
+        &ctx.accounts.sysvar_instructions.to_account_info(),
+        signer_seeds,
+    )?;
+
     // Verify collection if provided
     if let (
         Some(collection_mint),
         Some(collection_metadata),
         Some(collection_master_edition),
-        Some(sysvar_instructions),
     ) = (
         &ctx.accounts.collection_mint,
         &ctx.accounts.collection_metadata,
         &ctx.accounts.collection_master_edition,
-        &ctx.accounts.sysvar_instructions,
     ) {
         verify_collection(
             &ctx.accounts.metadata_account.to_account_info(),
@@ -274,7 +317,7 @@ pub fn handler(ctx: Context<MintNft>, name: String, symbol: String, uri: String)
             &collection_master_edition.to_account_info(),
             &ctx.accounts.admin_state.to_account_info(),
             &ctx.accounts.system_program.to_account_info(),
-            &sysvar_instructions.to_account_info(),
+            &ctx.accounts.sysvar_instructions.to_account_info(),
             signer_seeds,
         )?;
     }
@@ -305,6 +348,21 @@ pub fn handler(ctx: Context<MintNft>, name: String, symbol: String, uri: String)
         ),
         1,
     )?;
+
+    // **FREEZE THE TOKEN ACCOUNT TO MAKE IT NON-TRANSFERABLE (SOULBOUND)**
+    // Once frozen, the token account cannot transfer tokens, making the NFT soulbound
+    token::freeze_account(
+        CpiContext::new_with_signer(
+            ctx.accounts.token_program.to_account_info(),
+            token::FreezeAccount {
+                account: ctx.accounts.token_account.to_account_info(),
+                mint: ctx.accounts.mint.to_account_info(),
+                authority: ctx.accounts.admin_state.to_account_info(),
+            },
+            signer_seeds,
+        ),
+    )?;
+    msg!("Token account frozen - NFT is now soulbound (non-transferable)");
 
     // Runtime validation: ensure mint fee is valid
     require!(

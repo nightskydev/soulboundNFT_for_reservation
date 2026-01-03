@@ -82,7 +82,6 @@ describe("mint_nft", () => {
         signer: testContext.user1.keypair.publicKey,
         tokenAccount: nftTokenAccount,
         mint: user1NftMint.publicKey,
-        tokenMetadataProgram: METAPLEX_PROGRAM_ID,
         metadataAccount: metadataAccount,
         paymentMint: testContext.usdcMint,
         payerTokenAccount: testContext.user1.tokenAccount,
@@ -90,7 +89,6 @@ describe("mint_nft", () => {
         collectionMint: null,
         collectionMetadata: null,
         collectionMasterEdition: null,
-        sysvarInstructions: null,
       })
       .preInstructions([modifyComputeUnits])
       .signers([testContext.user1.keypair, user1NftMint])
@@ -203,7 +201,6 @@ describe("mint_nft", () => {
         signer: testContext.user2.keypair.publicKey,
         tokenAccount: nftTokenAccount,
         mint: user2NftMint.publicKey,
-        tokenMetadataProgram: METAPLEX_PROGRAM_ID,
         metadataAccount: user2MetadataAccount,
         paymentMint: testContext.usdcMint,
         payerTokenAccount: testContext.user2.tokenAccount,
@@ -211,7 +208,6 @@ describe("mint_nft", () => {
         collectionMint: testContext.ogCollectionMint,
         collectionMetadata: collectionMetadataAccount,
         collectionMasterEdition: collectionMasterEditionAccount,
-        sysvarInstructions: SYSVAR_INSTRUCTIONS_PUBKEY,
       })
       .preInstructions([modifyComputeUnits])
       .signers([testContext.user2.keypair, user2NftMint])
@@ -248,7 +244,6 @@ describe("mint_nft", () => {
         signer: testContext.user1.keypair.publicKey,
         tokenAccount: nftTokenAccount,
         mint: secondMint.publicKey,
-        tokenMetadataProgram: METAPLEX_PROGRAM_ID,
         metadataAccount: metadataAccount,
         paymentMint: testContext.usdcMint,
         payerTokenAccount: testContext.user1.tokenAccount,

@@ -5,6 +5,7 @@ import { Keypair, PublicKey, ComputeBudgetProgram } from "@solana/web3.js";
 import { TOKEN_PROGRAM_ID, getAssociatedTokenAddressSync, mintTo, createAssociatedTokenAccount } from "@solana/spl-token";
 
 const METAPLEX_PROGRAM_ID = new PublicKey("metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s");
+const SYSVAR_INSTRUCTIONS_PUBKEY = new PublicKey("Sysvar1nstructions1111111111111111111111111");
 
 describe("burn_nft", () => {
   let burnTestUserNftMint: Keypair;
@@ -87,7 +88,7 @@ describe("burn_nft", () => {
         collectionMint: null,
         collectionMetadata: null,
         collectionMasterEdition: null,
-        sysvarInstructions: null,
+        sysvarInstructions: SYSVAR_INSTRUCTIONS_PUBKEY,
       })
       .preInstructions([modifyComputeUnits])
       .signers([burnTestUser.keypair, burnTestUserNftMint])
@@ -170,7 +171,7 @@ describe("burn_nft", () => {
         collectionMint: null,
         collectionMetadata: null,
         collectionMasterEdition: null,
-        sysvarInstructions: null,
+        sysvarInstructions: SYSVAR_INSTRUCTIONS_PUBKEY,
       })
       .preInstructions([modifyComputeUnits])
       .signers([otherKeypair, otherUserNftMint])
@@ -252,7 +253,7 @@ describe("burn_nft", () => {
         collectionMint: null,
         collectionMetadata: null,
         collectionMasterEdition: null,
-        sysvarInstructions: null,
+        sysvarInstructions: SYSVAR_INSTRUCTIONS_PUBKEY,
       })
       .preInstructions([modifyComputeUnits])
       .signers([testKeypair, testUserNftMint])

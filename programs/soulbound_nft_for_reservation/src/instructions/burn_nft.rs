@@ -46,6 +46,24 @@ pub fn handler(ctx: Context<BurnNft>) -> Result<()> {
         ProgramErrorCode::InvalidTokenAccount
     );
 
+    // **UNFREEZE THE TOKEN ACCOUNT FIRST** (Required for soulbound NFTs)
+    // The account was frozen to make it non-transferable, but we need to unfreeze it to burn it
+    let bump = ctx.bumps.admin_state;
+    let signer_seeds: &[&[&[u8]]] = &[&[b"admin_state", &[bump]]];
+    
+    token::thaw_account(
+        CpiContext::new_with_signer(
+            ctx.accounts.token_program.to_account_info(),
+            token::ThawAccount {
+                account: ctx.accounts.old_token_account.to_account_info(),
+                mint: ctx.accounts.old_mint.to_account_info(),
+                authority: ctx.accounts.admin_state.to_account_info(),
+            },
+            signer_seeds,
+        ),
+    )?;
+    msg!("Token account unfrozen for burning");
+
     // Burn the NFT token (reduces supply to 0)
     token::burn(
         CpiContext::new(
