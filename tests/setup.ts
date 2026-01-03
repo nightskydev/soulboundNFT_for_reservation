@@ -18,11 +18,13 @@ import { expect } from "chai";
 import { BN } from "bn.js";
 
 // Test constants
-export const MINT_FEE = new BN(1000000); // 1 USDC (6 decimals)
-export const MAX_SUPPLY = new BN(1000);
+export const OG_MINT_FEE = new BN(5000000); // 5 USDC (6 decimals)
+export const OG_MAX_SUPPLY = new BN(100);
+export const REGULAR_MINT_FEE = new BN(3000000); // 3 USDC
+export const REGULAR_MAX_SUPPLY = new BN(500);
+export const BASIC_MINT_FEE = new BN(1000000); // 1 USDC
+export const BASIC_MAX_SUPPLY = new BN(1000);
 export const MINT_START_DATE = new BN(0); // No restriction for tests
-export const DONGLE_PRICE_NFT_HOLDER = new BN(100000000); // 100 USDC
-export const DONGLE_PRICE_NORMAL = new BN(499000000); // 499 USDC
 
 // Test users
 export interface TestUser {
@@ -55,7 +57,8 @@ class TestContext {
 
   // Collections
   public ogCollectionMint?: PublicKey;
-  public dongleProofCollectionMint?: PublicKey;
+  public regularCollectionMint?: PublicKey;
+  public basicCollectionMint?: PublicKey;
 
   // Track if admin is initialized
   public adminInitialized = false;
@@ -254,14 +257,25 @@ export const assertAdminState = async (
   expectedValues: Partial<{
     superAdmin: PublicKey;
     withdrawWallet: PublicKey;
-    mintFee: BN;
-    maxSupply: BN;
     mintStartDate: BN;
-    donglePriceNftHolder: BN;
-    donglePriceNormal: BN;
-    purchaseStarted: boolean;
-    ogCollection: PublicKey;
-    dongleProofCollection: PublicKey;
+    ogCollection: {
+      collectionMint: PublicKey;
+      mintFee: BN;
+      maxSupply: BN;
+      currentReservedCount: BN;
+    };
+    regularCollection: {
+      collectionMint: PublicKey;
+      mintFee: BN;
+      maxSupply: BN;
+      currentReservedCount: BN;
+    };
+    basicCollection: {
+      collectionMint: PublicKey;
+      mintFee: BN;
+      maxSupply: BN;
+      currentReservedCount: BN;
+    };
   }>
 ): Promise<void> => {
   const adminState = await testContext.fetchAdminState();
@@ -272,28 +286,49 @@ export const assertAdminState = async (
   if (expectedValues.withdrawWallet) {
     expect(adminState.withdrawWallet.toString()).to.equal(expectedValues.withdrawWallet.toString());
   }
-  if (expectedValues.mintFee) {
-    expect(adminState.mintFee.toString()).to.equal(expectedValues.mintFee.toString());
-  }
-  if (expectedValues.maxSupply) {
-    expect(adminState.maxSupply.toString()).to.equal(expectedValues.maxSupply.toString());
-  }
   if (expectedValues.mintStartDate !== undefined) {
     expect(adminState.mintStartDate.toString()).to.equal(expectedValues.mintStartDate.toString());
   }
-  if (expectedValues.donglePriceNftHolder) {
-    expect(adminState.donglePriceNftHolder.toString()).to.equal(expectedValues.donglePriceNftHolder.toString());
-  }
-  if (expectedValues.donglePriceNormal) {
-    expect(adminState.donglePriceNormal.toString()).to.equal(expectedValues.donglePriceNormal.toString());
-  }
-  if (expectedValues.purchaseStarted !== undefined) {
-    expect(adminState.purchaseStarted).to.equal(expectedValues.purchaseStarted);
-  }
   if (expectedValues.ogCollection) {
-    expect(adminState.ogCollection.toString()).to.equal(expectedValues.ogCollection.toString());
+    if (expectedValues.ogCollection.collectionMint) {
+      expect(adminState.ogCollection.collectionMint.toString()).to.equal(expectedValues.ogCollection.collectionMint.toString());
+    }
+    if (expectedValues.ogCollection.mintFee) {
+      expect(adminState.ogCollection.mintFee.toString()).to.equal(expectedValues.ogCollection.mintFee.toString());
+    }
+    if (expectedValues.ogCollection.maxSupply) {
+      expect(adminState.ogCollection.maxSupply.toString()).to.equal(expectedValues.ogCollection.maxSupply.toString());
+    }
+    if (expectedValues.ogCollection.currentReservedCount !== undefined) {
+      expect(adminState.ogCollection.currentReservedCount.toString()).to.equal(expectedValues.ogCollection.currentReservedCount.toString());
+    }
   }
-  if (expectedValues.dongleProofCollection) {
-    expect(adminState.dongleProofCollection.toString()).to.equal(expectedValues.dongleProofCollection.toString());
+  if (expectedValues.regularCollection) {
+    if (expectedValues.regularCollection.collectionMint) {
+      expect(adminState.regularCollection.collectionMint.toString()).to.equal(expectedValues.regularCollection.collectionMint.toString());
+    }
+    if (expectedValues.regularCollection.mintFee) {
+      expect(adminState.regularCollection.mintFee.toString()).to.equal(expectedValues.regularCollection.mintFee.toString());
+    }
+    if (expectedValues.regularCollection.maxSupply) {
+      expect(adminState.regularCollection.maxSupply.toString()).to.equal(expectedValues.regularCollection.maxSupply.toString());
+    }
+    if (expectedValues.regularCollection.currentReservedCount !== undefined) {
+      expect(adminState.regularCollection.currentReservedCount.toString()).to.equal(expectedValues.regularCollection.currentReservedCount.toString());
+    }
+  }
+  if (expectedValues.basicCollection) {
+    if (expectedValues.basicCollection.collectionMint) {
+      expect(adminState.basicCollection.collectionMint.toString()).to.equal(expectedValues.basicCollection.collectionMint.toString());
+    }
+    if (expectedValues.basicCollection.mintFee) {
+      expect(adminState.basicCollection.mintFee.toString()).to.equal(expectedValues.basicCollection.mintFee.toString());
+    }
+    if (expectedValues.basicCollection.maxSupply) {
+      expect(adminState.basicCollection.maxSupply.toString()).to.equal(expectedValues.basicCollection.maxSupply.toString());
+    }
+    if (expectedValues.basicCollection.currentReservedCount !== undefined) {
+      expect(adminState.basicCollection.currentReservedCount.toString()).to.equal(expectedValues.basicCollection.currentReservedCount.toString());
+    }
   }
 };

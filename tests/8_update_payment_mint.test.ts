@@ -1,6 +1,6 @@
 import * as anchor from "@coral-xyz/anchor";
 import { expect } from "chai";
-import { testContext, initializeTestContext, MINT_FEE, MAX_SUPPLY, MINT_START_DATE, DONGLE_PRICE_NFT_HOLDER, DONGLE_PRICE_NORMAL } from "./setup";
+import { testContext, initializeTestContext, MINT_FEE, MAX_SUPPLY, MINT_START_DATE } from "./setup";
 import { Keypair, PublicKey } from "@solana/web3.js";
 import { TOKEN_PROGRAM_ID, createMint, getAccount } from "@solana/spl-token";
 
@@ -15,9 +15,7 @@ describe("update_payment_mint", () => {
           MINT_FEE,
           MAX_SUPPLY,
           testContext.withdrawWallet.publicKey,
-          MINT_START_DATE,
-          DONGLE_PRICE_NFT_HOLDER,
-          DONGLE_PRICE_NORMAL
+          MINT_START_DATE
         )
         .accounts({
           superAdmin: testContext.admin.publicKey,

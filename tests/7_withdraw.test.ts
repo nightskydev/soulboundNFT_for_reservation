@@ -1,56 +1,201 @@
 import * as anchor from "@coral-xyz/anchor";
 import { expect } from "chai";
-import { testContext, initializeTestContext, MINT_FEE, MAX_SUPPLY, MINT_START_DATE, DONGLE_PRICE_NFT_HOLDER, DONGLE_PRICE_NORMAL } from "./setup";
-import { Keypair, PublicKey } from "@solana/web3.js";
-import { TOKEN_PROGRAM_ID, getAccount, createAssociatedTokenAccount, mintTo } from "@solana/spl-token";
+import { 
+  testContext, 
+  initializeTestContext, 
+  OG_MINT_FEE,
+  REGULAR_MINT_FEE,
+  BASIC_MINT_FEE,
+  OG_MAX_SUPPLY,
+  REGULAR_MAX_SUPPLY,
+  BASIC_MAX_SUPPLY,
+  MINT_START_DATE
+} from "./setup";
+import { Keypair, PublicKey, ComputeBudgetProgram } from "@solana/web3.js";
+import { TOKEN_PROGRAM_ID, getAccount, createAssociatedTokenAccount, mintTo, getAssociatedTokenAddressSync, ASSOCIATED_TOKEN_PROGRAM_ID } from "@solana/spl-token";
+
+const METAPLEX_PROGRAM_ID = new PublicKey("metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s");
+const SYSVAR_INSTRUCTIONS_PUBKEY = new PublicKey("Sysvar1nstructions1111111111111111111111111");
 
 describe("withdraw", () => {
+  let ogCollectionMint: PublicKey;
+
   before(async () => {
     await initializeTestContext();
 
     // Initialize admin if not already done
     if (!testContext.adminInitialized) {
+      const ogCollectionMintKeypair = Keypair.generate();
+      const regularCollectionMintKeypair = Keypair.generate();
+      const basicCollectionMintKeypair = Keypair.generate();
+
       await testContext.program.methods
         .initAdmin(
-          MINT_FEE,
-          MAX_SUPPLY,
+          ogCollectionMintKeypair.publicKey,
+          OG_MINT_FEE,
+          OG_MAX_SUPPLY,
+          regularCollectionMintKeypair.publicKey,
+          REGULAR_MINT_FEE,
+          REGULAR_MAX_SUPPLY,
+          basicCollectionMintKeypair.publicKey,
+          BASIC_MINT_FEE,
+          BASIC_MAX_SUPPLY,
           testContext.withdrawWallet.publicKey,
-          MINT_START_DATE,
-          DONGLE_PRICE_NFT_HOLDER,
-          DONGLE_PRICE_NORMAL
+          MINT_START_DATE
         )
         .accounts({
           superAdmin: testContext.admin.publicKey,
-          adminState: testContext.adminStatePda,
           paymentMint: testContext.usdcMint,
-          vault: testContext.vaultPda,
           paymentTokenProgram: TOKEN_PROGRAM_ID,
-          systemProgram: anchor.web3.SystemProgram.programId,
-          rent: anchor.web3.SYSVAR_RENT_PUBKEY,
         })
         .signers([testContext.admin])
         .rpc();
+      
+      const modifyComputeUnits = ComputeBudgetProgram.setComputeUnitLimit({ units: 400_000 });
+
+      // Create OG Collection (needed for withdraw tests)
+      const ogCollectionTokenAccount = getAssociatedTokenAddressSync(
+        ogCollectionMintKeypair.publicKey,
+        testContext.adminStatePda,
+        true
+      );
+      const [ogMetadata] = PublicKey.findProgramAddressSync(
+        [Buffer.from("metadata"), METAPLEX_PROGRAM_ID.toBuffer(), ogCollectionMintKeypair.publicKey.toBuffer()],
+        METAPLEX_PROGRAM_ID
+      );
+      const [ogMasterEdition] = PublicKey.findProgramAddressSync(
+        [Buffer.from("metadata"), METAPLEX_PROGRAM_ID.toBuffer(), ogCollectionMintKeypair.publicKey.toBuffer(), Buffer.from("edition")],
+        METAPLEX_PROGRAM_ID
+      );
+
+      await testContext.program.methods
+        .createCollectionNft("OG Collection", "OG", "https://example.com/og.json")
+        .accounts({
+          signer: testContext.admin.publicKey,
+          collectionMint: ogCollectionMintKeypair.publicKey,
+          collectionTokenAccount: ogCollectionTokenAccount,
+          metadataAccount: ogMetadata,
+          masterEditionAccount: ogMasterEdition,
+        })
+        .preInstructions([modifyComputeUnits])
+        .signers([testContext.admin, ogCollectionMintKeypair])
+        .rpc();
+
+      // Regular Collection
+      const regularCollectionTokenAccount = getAssociatedTokenAddressSync(
+        regularCollectionMintKeypair.publicKey,
+        testContext.adminStatePda,
+        true
+      );
+      const [regularMetadata] = PublicKey.findProgramAddressSync(
+        [Buffer.from("metadata"), METAPLEX_PROGRAM_ID.toBuffer(), regularCollectionMintKeypair.publicKey.toBuffer()],
+        METAPLEX_PROGRAM_ID
+      );
+      const [regularMasterEdition] = PublicKey.findProgramAddressSync(
+        [Buffer.from("metadata"), METAPLEX_PROGRAM_ID.toBuffer(), regularCollectionMintKeypair.publicKey.toBuffer(), Buffer.from("edition")],
+        METAPLEX_PROGRAM_ID
+      );
+
+      await testContext.program.methods
+        .createCollectionNft("Regular Collection", "REG", "https://example.com/regular.json")
+        .accounts({
+          signer: testContext.admin.publicKey,
+          collectionMint: regularCollectionMintKeypair.publicKey,
+          collectionTokenAccount: regularCollectionTokenAccount,
+          metadataAccount: regularMetadata,
+          masterEditionAccount: regularMasterEdition,
+        })
+        .preInstructions([modifyComputeUnits])
+        .signers([testContext.admin, regularCollectionMintKeypair])
+        .rpc();
+
+      // Basic Collection
+      const basicCollectionTokenAccount = getAssociatedTokenAddressSync(
+        basicCollectionMintKeypair.publicKey,
+        testContext.adminStatePda,
+        true
+      );
+      const [basicMetadata] = PublicKey.findProgramAddressSync(
+        [Buffer.from("metadata"), METAPLEX_PROGRAM_ID.toBuffer(), basicCollectionMintKeypair.publicKey.toBuffer()],
+        METAPLEX_PROGRAM_ID
+      );
+      const [basicMasterEdition] = PublicKey.findProgramAddressSync(
+        [Buffer.from("metadata"), METAPLEX_PROGRAM_ID.toBuffer(), basicCollectionMintKeypair.publicKey.toBuffer(), Buffer.from("edition")],
+        METAPLEX_PROGRAM_ID
+      );
+
+      await testContext.program.methods
+        .createCollectionNft("Basic Collection", "BASIC", "https://example.com/basic.json")
+        .accounts({
+          signer: testContext.admin.publicKey,
+          collectionMint: basicCollectionMintKeypair.publicKey,
+          collectionTokenAccount: basicCollectionTokenAccount,
+          metadataAccount: basicMetadata,
+          masterEditionAccount: basicMasterEdition,
+        })
+        .preInstructions([modifyComputeUnits])
+        .signers([testContext.admin, basicCollectionMintKeypair])
+        .rpc();
+
+      testContext.ogCollectionMint = ogCollectionMintKeypair.publicKey;
+      testContext.regularCollectionMint = regularCollectionMintKeypair.publicKey;
+      testContext.basicCollectionMint = basicCollectionMintKeypair.publicKey;
+      
       testContext.adminInitialized = true;
+    } else {
+      // Admin already initialized - check if OG collection has proper metadata
+      const adminState = await testContext.fetchAdminState();
+      const [ogMetadataPda] = PublicKey.findProgramAddressSync(
+        [Buffer.from("metadata"), METAPLEX_PROGRAM_ID.toBuffer(), adminState.ogCollection.collectionMint.toBuffer()],
+        METAPLEX_PROGRAM_ID
+      );
+      
+      const ogMetadata = await testContext.connection.getAccountInfo(ogMetadataPda);
+      if (!ogMetadata) {
+        // Need to create proper OG collection NFT
+        const ogCollectionMintKeypair = Keypair.generate();
+        const modifyComputeUnits = ComputeBudgetProgram.setComputeUnitLimit({ units: 400_000 });
+
+        const ogCollectionTokenAccount = getAssociatedTokenAddressSync(
+          ogCollectionMintKeypair.publicKey,
+          testContext.adminStatePda,
+          true
+        );
+        const [ogMetadata] = PublicKey.findProgramAddressSync(
+          [Buffer.from("metadata"), METAPLEX_PROGRAM_ID.toBuffer(), ogCollectionMintKeypair.publicKey.toBuffer()],
+          METAPLEX_PROGRAM_ID
+        );
+        const [ogMasterEdition] = PublicKey.findProgramAddressSync(
+          [Buffer.from("metadata"), METAPLEX_PROGRAM_ID.toBuffer(), ogCollectionMintKeypair.publicKey.toBuffer(), Buffer.from("edition")],
+          METAPLEX_PROGRAM_ID
+        );
+
+        await testContext.program.methods
+          .createCollectionNft("OG Collection", "OG", "https://example.com/og.json")
+          .accounts({
+            signer: testContext.admin.publicKey,
+            collectionMint: ogCollectionMintKeypair.publicKey,
+            collectionTokenAccount: ogCollectionTokenAccount,
+            metadataAccount: ogMetadata,
+            masterEditionAccount: ogMasterEdition,
+          })
+          .preInstructions([modifyComputeUnits])
+          .signers([testContext.admin, ogCollectionMintKeypair])
+          .rpc();
+
+        // Update admin state
+        await testContext.program.methods
+          .updateCollectionMint({ og: {} }, ogCollectionMintKeypair.publicKey)
+          .accounts({ superAdmin: testContext.admin.publicKey })
+          .signers([testContext.admin])
+          .rpc();
+
+        testContext.ogCollectionMint = ogCollectionMintKeypair.publicKey;
+      }
     }
+    
+    ogCollectionMint = testContext.ogCollectionMint!;
 
-    // Enable purchases and set prices
-    await testContext.program.methods
-      .updatePurchaseStarted(true)
-      .accounts({
-        superAdmin: testContext.admin.publicKey,
-        adminState: testContext.adminStatePda,
-      })
-      .signers([testContext.admin])
-      .rpc();
-
-    await testContext.program.methods
-      .updateDonglePriceNormal(new anchor.BN(10000000)) // 10 USDC
-      .accounts({
-        superAdmin: testContext.admin.publicKey,
-        adminState: testContext.adminStatePda,
-      })
-      .signers([testContext.admin])
-      .rpc();
 
     // Update withdraw wallet to admin's public key if different
     const adminState = await testContext.fetchAdminState();
@@ -66,8 +211,55 @@ describe("withdraw", () => {
     }
   });
 
+  // Helper function to mint an NFT and add funds to vault
+  async function mintNftToAddFunds(user: Keypair, userUsdcAccount: PublicKey) {
+    const nftMint = Keypair.generate();
+    const userNftAccount = getAssociatedTokenAddressSync(nftMint.publicKey, user.publicKey);
+    const [nftMetadataPda] = PublicKey.findProgramAddressSync(
+      [Buffer.from("metadata"), METAPLEX_PROGRAM_ID.toBuffer(), nftMint.publicKey.toBuffer()],
+      METAPLEX_PROGRAM_ID
+    );
+    const [nftMasterEditionPda] = PublicKey.findProgramAddressSync(
+      [Buffer.from("metadata"), METAPLEX_PROGRAM_ID.toBuffer(), nftMint.publicKey.toBuffer(), Buffer.from("edition")],
+      METAPLEX_PROGRAM_ID
+    );
+    const [collectionMetadataPda] = PublicKey.findProgramAddressSync(
+      [Buffer.from("metadata"), METAPLEX_PROGRAM_ID.toBuffer(), ogCollectionMint.toBuffer()],
+      METAPLEX_PROGRAM_ID
+    );
+    const [collectionMasterEditionPda] = PublicKey.findProgramAddressSync(
+      [Buffer.from("metadata"), METAPLEX_PROGRAM_ID.toBuffer(), ogCollectionMint.toBuffer(), Buffer.from("edition")],
+      METAPLEX_PROGRAM_ID
+    );
+    const [collectionStatePda] = PublicKey.findProgramAddressSync(
+      [Buffer.from("collection"), ogCollectionMint.toBuffer()],
+      testContext.program.programId
+    );
+
+    await testContext.program.methods
+      .mintNft({ og: {} }, "Test NFT", "TEST", "https://example.com/nft.json")
+      .accounts({
+        signer: user.publicKey,
+        tokenAccount: userNftAccount,
+        mint: nftMint.publicKey,
+        metadataAccount: nftMetadataPda,
+        paymentMint: testContext.usdcMint,
+        payerTokenAccount: userUsdcAccount,
+        paymentTokenProgram: TOKEN_PROGRAM_ID,
+        collectionMint: ogCollectionMint,
+        collectionMetadata: collectionMetadataPda,
+        collectionMasterEdition: collectionMasterEditionPda,
+        sysvarInstructions: SYSVAR_INSTRUCTIONS_PUBKEY,
+      })
+      .preInstructions([
+        ComputeBudgetProgram.setComputeUnitLimit({ units: 400_000 })
+      ])
+      .signers([user, nftMint])
+      .rpc();
+  }
+
   it("should withdraw specific amount successfully", async () => {
-    // First, add some funds to the vault by making a purchase
+    // First, add some funds to the vault by minting an NFT
     const tempUser = Keypair.generate();
     await testContext.connection.confirmTransaction(
       await testContext.connection.requestAirdrop(tempUser.publicKey, 5 * anchor.web3.LAMPORTS_PER_SOL)
@@ -89,17 +281,8 @@ describe("withdraw", () => {
       100000000 // 100 USDC
     );
 
-    // Make a purchase to add funds to vault
-    await testContext.program.methods
-      .purchaseDongle()
-      .accounts({
-        buyer: tempUser.publicKey,
-        paymentMint: testContext.usdcMint,
-        buyerTokenAccount: tempUserUsdcAccount,
-        paymentTokenProgram: TOKEN_PROGRAM_ID,
-      })
-      .signers([tempUser])
-      .rpc();
+    // Mint an NFT to add funds to vault
+    await mintNftToAddFunds(tempUser, tempUserUsdcAccount);
 
     // Get vault balance before withdrawal
     const vaultBalanceBefore = await testContext.getVaultBalance();
@@ -116,9 +299,7 @@ describe("withdraw", () => {
       .withdraw(new anchor.BN(withdrawAmount.toString()))
       .accounts({
         superAdmin: testContext.admin.publicKey,
-        adminState: testContext.adminStatePda,
         paymentMint: testContext.usdcMint,
-        vault: testContext.vaultPda,
         withdrawTokenAccount: testContext.adminUsdcAccount,
         tokenProgram: TOKEN_PROGRAM_ID,
       })
@@ -164,16 +345,7 @@ describe("withdraw", () => {
         50000000 // 50 USDC
       );
 
-      await testContext.program.methods
-        .purchaseDongle()
-        .accounts({
-          buyer: tempUser.publicKey,
-          paymentMint: testContext.usdcMint,
-          buyerTokenAccount: tempUserUsdcAccount,
-          paymentTokenProgram: TOKEN_PROGRAM_ID,
-        })
-        .signers([tempUser])
-        .rpc();
+      await mintNftToAddFunds(tempUser, tempUserUsdcAccount);
     }
 
     // Get balances before withdrawal
@@ -189,9 +361,7 @@ describe("withdraw", () => {
       .withdrawAll()
       .accounts({
         superAdmin: testContext.admin.publicKey,
-        adminState: testContext.adminStatePda,
         paymentMint: testContext.usdcMint,
-        vault: testContext.vaultPda,
         withdrawTokenAccount: testContext.adminUsdcAccount,
         tokenProgram: TOKEN_PROGRAM_ID,
       })
@@ -220,9 +390,7 @@ describe("withdraw", () => {
         .withdraw(new anchor.BN(withdrawAmount.toString()))
         .accounts({
           superAdmin: testContext.admin.publicKey,
-          adminState: testContext.adminStatePda,
           paymentMint: testContext.usdcMint,
-          vault: testContext.vaultPda,
           withdrawTokenAccount: testContext.adminUsdcAccount,
           tokenProgram: TOKEN_PROGRAM_ID,
         })
@@ -244,9 +412,7 @@ describe("withdraw", () => {
         .withdrawAll()
         .accounts({
           superAdmin: testContext.admin.publicKey,
-          adminState: testContext.adminStatePda,
           paymentMint: testContext.usdcMint,
-          vault: testContext.vaultPda,
           withdrawTokenAccount: testContext.adminUsdcAccount,
           tokenProgram: TOKEN_PROGRAM_ID,
         })
@@ -260,9 +426,7 @@ describe("withdraw", () => {
         .withdrawAll()
         .accounts({
           superAdmin: testContext.admin.publicKey,
-          adminState: testContext.adminStatePda,
           paymentMint: testContext.usdcMint,
-          vault: testContext.vaultPda,
           withdrawTokenAccount: testContext.adminUsdcAccount,
           tokenProgram: TOKEN_PROGRAM_ID,
         })
@@ -281,9 +445,7 @@ describe("withdraw", () => {
         .withdraw(new anchor.BN(0))
         .accounts({
           superAdmin: testContext.admin.publicKey,
-          adminState: testContext.adminStatePda,
           paymentMint: testContext.usdcMint,
-          vault: testContext.vaultPda,
           withdrawTokenAccount: testContext.adminUsdcAccount,
           tokenProgram: TOKEN_PROGRAM_ID,
         })
@@ -319,16 +481,7 @@ describe("withdraw", () => {
       50000000 // 50 USDC
     );
 
-    await testContext.program.methods
-      .purchaseDongle()
-      .accounts({
-        buyer: tempUser.publicKey,
-        paymentMint: testContext.usdcMint,
-        buyerTokenAccount: tempUserUsdcAccount,
-        paymentTokenProgram: TOKEN_PROGRAM_ID,
-      })
-      .signers([tempUser])
-      .rpc();
+    await mintNftToAddFunds(tempUser, tempUserUsdcAccount);
 
     // Try to withdraw with non-admin user
     try {
@@ -336,9 +489,7 @@ describe("withdraw", () => {
         .withdraw(new anchor.BN(1000000))
         .accounts({
           superAdmin: testContext.user1.keypair.publicKey, // Non-admin
-          adminState: testContext.adminStatePda,
           paymentMint: testContext.usdcMint,
-          vault: testContext.vaultPda,
           withdrawTokenAccount: testContext.user1.tokenAccount,
           tokenProgram: TOKEN_PROGRAM_ID,
         })

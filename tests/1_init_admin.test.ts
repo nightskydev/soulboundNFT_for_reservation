@@ -3,15 +3,18 @@ import { expect } from "chai";
 import {
   testContext,
   initializeTestContext,
-  MINT_FEE,
-  MAX_SUPPLY,
+  OG_MINT_FEE,
+  OG_MAX_SUPPLY,
+  REGULAR_MINT_FEE,
+  REGULAR_MAX_SUPPLY,
+  BASIC_MINT_FEE,
+  BASIC_MAX_SUPPLY,
   MINT_START_DATE,
-  DONGLE_PRICE_NFT_HOLDER,
-  DONGLE_PRICE_NORMAL,
   assertAdminState,
 } from "./setup";
-import { PublicKey } from "@solana/web3.js";
+import { PublicKey, Keypair } from "@solana/web3.js";
 import { TOKEN_PROGRAM_ID } from "@solana/spl-token";
+import { BN } from "bn.js";
 
 describe("init_admin", () => {
   before(async () => {
@@ -25,15 +28,25 @@ describe("init_admin", () => {
       return;
     }
 
+    // Create placeholder collection mints (actual collection NFTs created in tests that need them)
+    testContext.ogCollectionMint = Keypair.generate().publicKey;
+    testContext.regularCollectionMint = Keypair.generate().publicKey;
+    testContext.basicCollectionMint = Keypair.generate().publicKey;
+
     // Initialize admin
     const tx = await testContext.program.methods
       .initAdmin(
-        MINT_FEE,
-        MAX_SUPPLY,
+        testContext.ogCollectionMint,
+        OG_MINT_FEE,
+        OG_MAX_SUPPLY,
+        testContext.regularCollectionMint,
+        REGULAR_MINT_FEE,
+        REGULAR_MAX_SUPPLY,
+        testContext.basicCollectionMint,
+        BASIC_MINT_FEE,
+        BASIC_MAX_SUPPLY,
         testContext.withdrawWallet.publicKey,
-        MINT_START_DATE,
-        DONGLE_PRICE_NFT_HOLDER,
-        DONGLE_PRICE_NORMAL
+        MINT_START_DATE
       )
       .accounts({
         superAdmin: testContext.admin.publicKey,
@@ -55,14 +68,25 @@ describe("init_admin", () => {
     await assertAdminState({
       superAdmin: testContext.admin.publicKey,
       withdrawWallet: testContext.withdrawWallet.publicKey,
-      mintFee: MINT_FEE,
-      maxSupply: MAX_SUPPLY,
       mintStartDate: MINT_START_DATE,
-      donglePriceNftHolder: DONGLE_PRICE_NFT_HOLDER,
-      donglePriceNormal: DONGLE_PRICE_NORMAL,
-      purchaseStarted: false,
-      ogCollection: PublicKey.default,
-      dongleProofCollection: PublicKey.default,
+      ogCollection: {
+        collectionMint: testContext.ogCollectionMint,
+        mintFee: OG_MINT_FEE,
+        maxSupply: OG_MAX_SUPPLY,
+        currentReservedCount: new BN(0),
+      },
+      regularCollection: {
+        collectionMint: testContext.regularCollectionMint,
+        mintFee: REGULAR_MINT_FEE,
+        maxSupply: REGULAR_MAX_SUPPLY,
+        currentReservedCount: new BN(0),
+      },
+      basicCollection: {
+        collectionMint: testContext.basicCollectionMint,
+        mintFee: BASIC_MINT_FEE,
+        maxSupply: BASIC_MAX_SUPPLY,
+        currentReservedCount: new BN(0),
+      },
     });
 
     // Verify vault was created
@@ -71,9 +95,11 @@ describe("init_admin", () => {
     expect(vaultAccount!.owner.toString()).to.equal(TOKEN_PROGRAM_ID.toString());
   });
 
-  it("should verify current_reserved_count starts at 0", async () => {
+  it("should verify all collection counts start at 0", async () => {
     const adminState = await testContext.fetchAdminState();
-    expect(adminState.currentReservedCount.toNumber()).to.equal(0);
+    expect(adminState.ogCollection.currentReservedCount.toNumber()).to.equal(0);
+    expect(adminState.regularCollection.currentReservedCount.toNumber()).to.equal(0);
+    expect(adminState.basicCollection.currentReservedCount.toNumber()).to.equal(0);
   });
 
   it("should verify payment_mint is set correctly", async () => {

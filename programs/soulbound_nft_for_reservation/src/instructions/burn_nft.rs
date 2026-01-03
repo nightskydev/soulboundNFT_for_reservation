@@ -28,10 +28,13 @@ pub struct BurnNft<'info> {
         bump,
     )]
     pub admin_state: Box<Account<'info, AdminState>>,
+
+    /// CHECK: Optional - metadata account to verify collection membership
+    pub metadata_account: Option<UncheckedAccount<'info>>,
 }
 
-pub fn handler(ctx: Context<BurnNft>) -> Result<()> {
-    msg!("Burn NFT process started");
+pub fn handler(ctx: Context<BurnNft>, collection_type: crate::state::CollectionType) -> Result<()> {
+    msg!("Burn NFT process started for collection type: {:?}", collection_type);
 
     // Validate that old_token_account is the correct associated token account for the signer
     let expected_ata = get_associated_token_address_with_program_id(
@@ -92,13 +95,18 @@ pub fn handler(ctx: Context<BurnNft>) -> Result<()> {
     // Note: SPL Token mints cannot be closed. The mint account remains on-chain
     // with supply = 0. This is standard behavior for NFT burns on Solana.
     
-    // Decrement reserved count with underflow protection
-    ctx.accounts.admin_state.current_reserved_count = ctx.accounts.admin_state
+    // Decrement reserved count for the specific collection with underflow protection
+    let collection_config = ctx.accounts.admin_state.get_collection_config_mut(collection_type);
+    collection_config.current_reserved_count = collection_config
         .current_reserved_count
         .checked_sub(1)
         .ok_or(ProgramErrorCode::ReservedCountUnderflow)?;
     
-    msg!("NFT burn complete. Reserved count: {}", ctx.accounts.admin_state.current_reserved_count);
+    msg!(
+        "NFT burn complete. Collection {:?} reserved count: {}",
+        collection_type,
+        collection_config.current_reserved_count
+    );
 
     Ok(())
 }

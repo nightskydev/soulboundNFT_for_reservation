@@ -44,20 +44,38 @@ async function main() {
   console.log("\n=== Minting Soulbound NFT ===\n");
 
   // Parse command line arguments
-  const collectionMintAddress = process.argv[2];
-  if (!collectionMintAddress) {
-    console.log("Usage: npx ts-node scripts/mint_nft.ts <COLLECTION_MINT_ADDRESS> [NFT_NAME] [NFT_SYMBOL] [NFT_URI]");
-    console.log("  COLLECTION_MINT_ADDRESS: The OG collection mint address (required)");
-    console.log("  NFT_NAME: Name for the NFT (optional, default: 'Soulbound OG NFT')");
-    console.log("  NFT_SYMBOL: Symbol for the NFT (optional, default: 'SBNFT')");
+  const collectionTypeArg = process.argv[2];
+  const collectionMintAddress = process.argv[3];
+  if (!collectionTypeArg || !collectionMintAddress) {
+    console.log("Usage: npx ts-node scripts/mint_nft.ts <COLLECTION_TYPE> <COLLECTION_MINT_ADDRESS> [NFT_NAME] [NFT_SYMBOL] [NFT_URI]");
+    console.log("  COLLECTION_TYPE: 'og', 'regular', or 'basic' (required)");
+    console.log("  COLLECTION_MINT_ADDRESS: The collection mint address (required)");
+    console.log("  NFT_NAME: Name for the NFT (optional, default: 'TEST NFT')");
+    console.log("  NFT_SYMBOL: Symbol for the NFT (optional, default: 'TEST')");
     console.log("  NFT_URI: Metadata URI for the NFT (optional)");
-    console.log("\nTo mint without collection, pass 'null' as the collection address.");
+    console.log("\nExamples:");
+    console.log("  npx ts-node scripts/mint_nft.ts og <OG_COLLECTION_MINT>");
+    console.log("  npx ts-node scripts/mint_nft.ts regular <REGULAR_COLLECTION_MINT> 'My NFT' 'MNFT'");
     process.exit(1);
   }
 
-  const nftName = process.argv[3] || NFT_NAME;
-  const nftSymbol = process.argv[4] || NFT_SYMBOL;
-  const nftUri = process.argv[5] || NFT_URI;
+  // Parse collection type
+  const collectionTypeMap: { [key: string]: any } = {
+    'og': { og: {} },
+    'regular': { regular: {} },
+    'basic': { basic: {} }
+  };
+  
+  const collectionType = collectionTypeMap[collectionTypeArg.toLowerCase()];
+  if (!collectionType) {
+    console.error(`\n❌ Invalid collection type: ${collectionTypeArg}`);
+    console.log("Valid types: og, regular, basic");
+    process.exit(1);
+  }
+
+  const nftName = process.argv[4] || NFT_NAME;
+  const nftSymbol = process.argv[5] || NFT_SYMBOL;
+  const nftUri = process.argv[6] || NFT_URI;
 
   // Load wallet from default Solana config path
   const walletPath = `${os.homedir()}/.config/solana/id.json`;
@@ -85,7 +103,7 @@ async function main() {
     throw new Error(`IDL not found at ${idlPath}. Please run 'anchor build' first.`);
   }
   const idl = JSON.parse(fs.readFileSync(idlPath, "utf-8"));
-  const programId = new PublicKey("7nwJWSLt65ZWBzBwSt9FTSF94phiafpj3NYzA7rm2Qb2");
+  const programId = new PublicKey("AzcZ8LcBKu1tT8ahYYqVTbUpfaonJmkGFNnPajYKSW9L");
   const program = new Program<SoulboundNftForReservation>(idl, provider);
 
   console.log("Program ID:", programId.toBase58());
@@ -97,11 +115,30 @@ async function main() {
   );
   console.log("Admin State PDA:", adminStatePda.toBase58());
 
-  // Fetch admin state to get payment mint
+  // Fetch admin state to get payment mint and collection config
   const adminState = await program.account.adminState.fetch(adminStatePda);
   const paymentMint = adminState.paymentMint;
-  console.log("Payment Mint (USDC):", paymentMint.toBase58());
-  console.log("Mint Fee:", adminState.mintFee.toString(), "lamports (", Number(adminState.mintFee) / 1_000_000, "USDC)");
+  
+  // Get the collection config based on collection type
+  let collectionConfig;
+  let collectionName;
+  if (collectionType.og) {
+    collectionConfig = adminState.ogCollection;
+    collectionName = "OG";
+  } else if (collectionType.regular) {
+    collectionConfig = adminState.regularCollection;
+    collectionName = "Regular";
+  } else {
+    collectionConfig = adminState.basicCollection;
+    collectionName = "Basic";
+  }
+  
+  console.log(`\n=== ${collectionName} Collection ===`);
+  console.log("Collection Mint:", collectionConfig.collectionMint.toBase58());
+  console.log("Mint Fee:", collectionConfig.mintFee.toString(), "lamports (", Number(collectionConfig.mintFee) / 1_000_000, "USDC)");
+  console.log("Max Supply:", collectionConfig.maxSupply.toString());
+  console.log("Current Count:", collectionConfig.currentReservedCount.toString());
+  console.log("\nPayment Mint (USDC):", paymentMint.toBase58());
 
   // Derive vault PDA
   const [vaultPda] = PublicKey.findProgramAddressSync(
@@ -138,8 +175,8 @@ async function main() {
     console.log("Payer Token Account:", payerTokenAccount.address.toBase58());
     console.log("Payer USDC Balance:", Number(payerTokenAccount.amount) / 1_000_000, "USDC");
     
-    if (payerTokenAccount.amount < adminState.mintFee) {
-      console.error(`\n❌ Insufficient USDC balance. Need ${Number(adminState.mintFee) / 1_000_000} USDC.`);
+    if (payerTokenAccount.amount < collectionConfig.mintFee) {
+      console.error(`\n❌ Insufficient USDC balance. Need ${Number(collectionConfig.mintFee) / 1_000_000} USDC.`);
       console.log("Please fund your wallet with USDC on devnet.");
       process.exit(1);
     }
@@ -148,21 +185,20 @@ async function main() {
     process.exit(1);
   }
 
-  // Handle collection mint
-  let collectionMint: PublicKey | null = null;
-  let collectionMetadata: PublicKey | null = null;
-  let collectionMasterEdition: PublicKey | null = null;
-  
-  if (collectionMintAddress.toLowerCase() !== "null") {
-    collectionMint = new PublicKey(collectionMintAddress);
-    [collectionMetadata] = getMetadataPda(collectionMint);
-    [collectionMasterEdition] = getMasterEditionPda(collectionMint);
-    console.log("\nCollection Mint:", collectionMint.toBase58());
-    console.log("Collection Metadata:", collectionMetadata.toBase58());
-    console.log("Collection Master Edition:", collectionMasterEdition.toBase58());
-  } else {
-    console.log("\nMinting without collection.");
+  // Verify collection mint matches
+  const collectionMint = new PublicKey(collectionMintAddress);
+  if (collectionMint.toBase58() !== collectionConfig.collectionMint.toBase58()) {
+    console.error(`\n❌ Collection mint mismatch!`);
+    console.error(`Expected: ${collectionConfig.collectionMint.toBase58()}`);
+    console.error(`Provided: ${collectionMint.toBase58()}`);
+    process.exit(1);
   }
+
+  const [collectionMetadata] = getMetadataPda(collectionMint);
+  const [collectionMasterEdition] = getMasterEditionPda(collectionMint);
+  console.log("\nCollection Mint:", collectionMint.toBase58());
+  console.log("Collection Metadata:", collectionMetadata.toBase58());
+  console.log("Collection Master Edition:", collectionMasterEdition.toBase58());
 
   console.log("\n=== NFT Details ===");
   console.log("Name:", nftName);
@@ -181,7 +217,7 @@ async function main() {
     console.log("\n⏳ Minting NFT...");
     
     const tx = await program.methods
-      .mintNft(nftName, nftSymbol, nftUri)
+      .mintNft(collectionType, nftName, nftSymbol, nftUri)
       .accounts({
         signer: wallet.publicKey,
         tokenAccount: nftTokenAccount,

@@ -6,20 +6,42 @@ import * as fs from "fs";
 import * as os from "os";
 
 // ============================================================
-// USAGE: npx ts-node scripts/update_dongle_proof_collection.ts <COLLECTION_MINT_ADDRESS>
+// USAGE: npx ts-node scripts/update_collection_mint.ts <COLLECTION_TYPE> <COLLECTION_MINT_ADDRESS>
 // ============================================================
 
 async function main() {
-  // Get collection address from command line args
+  // Get collection type and address from command line args
   const args = process.argv.slice(2);
-  if (args.length === 0) {
-    console.error("❌ Usage: npx ts-node scripts/update_dongle_proof_collection.ts <COLLECTION_MINT_ADDRESS>");
+  if (args.length < 2) {
+    console.error("❌ Usage: npx ts-node scripts/update_collection_mint.ts <COLLECTION_TYPE> <COLLECTION_MINT_ADDRESS>");
+    console.log("\nCOLLECTION_TYPE: 'og', 'regular', or 'basic'");
+    console.log("\nExamples:");
+    console.log("  npx ts-node scripts/update_collection_mint.ts og <OG_COLLECTION_MINT>");
+    console.log("  npx ts-node scripts/update_collection_mint.ts regular <REGULAR_COLLECTION_MINT>");
+    console.log("  npx ts-node scripts/update_collection_mint.ts basic <BASIC_COLLECTION_MINT>");
     process.exit(1);
   }
 
-  const dongleProofCollectionAddress = new PublicKey(args[0]);
-  console.log("\n=== Updating Dongle Proof Collection on Devnet ===\n");
-  console.log("Dongle Proof Collection Address:", dongleProofCollectionAddress.toBase58());
+  const collectionTypeArg = args[0];
+  const collectionAddress = new PublicKey(args[1]);
+
+  // Parse collection type
+  const collectionTypeMap: { [key: string]: any } = {
+    'og': { og: {} },
+    'regular': { regular: {} },
+    'basic': { basic: {} }
+  };
+  
+  const collectionType = collectionTypeMap[collectionTypeArg.toLowerCase()];
+  if (!collectionType) {
+    console.error(`\n❌ Invalid collection type: ${collectionTypeArg}`);
+    console.log("Valid types: og, regular, basic");
+    process.exit(1);
+  }
+
+  console.log("\n=== Updating Collection Mint on Devnet ===\n");
+  console.log("Collection Type:", collectionTypeArg.toUpperCase());
+  console.log("New Collection Address:", collectionAddress.toBase58());
 
   // Load wallet from default Solana config path
   const walletPath = `${os.homedir()}/.config/solana/id.json`;
@@ -51,7 +73,7 @@ async function main() {
   }
   
   const idl = JSON.parse(fs.readFileSync(idlPath, "utf-8"));
-  const programId = new PublicKey("7nwJWSLt65ZWBzBwSt9FTSF94phiafpj3NYzA7rm2Qb2");
+  const programId = new PublicKey("AzcZ8LcBKu1tT8ahYYqVTbUpfaonJmkGFNnPajYKSW9L");
   const program = new Program<SoulboundNftForReservation>(idl, provider);
 
   // Derive admin state PDA
@@ -62,11 +84,24 @@ async function main() {
 
   // Check current state
   const currentState = await program.account.adminState.fetch(adminState);
-  console.log("\nCurrent Dongle Proof Collection:", currentState.dongleProofCollection.toBase58());
+  let currentCollectionConfig;
+  let collectionName;
+  if (collectionType.og) {
+    currentCollectionConfig = currentState.ogCollection;
+    collectionName = "OG";
+  } else if (collectionType.regular) {
+    currentCollectionConfig = currentState.regularCollection;
+    collectionName = "Regular";
+  } else {
+    currentCollectionConfig = currentState.basicCollection;
+    collectionName = "Basic";
+  }
+  
+  console.log(`\nCurrent ${collectionName} Collection Mint:`, currentCollectionConfig.collectionMint.toBase58());
 
   try {
     const tx = await program.methods
-      .updateDongleProofCollection(dongleProofCollectionAddress)
+      .updateCollectionMint(collectionType, collectionAddress)
       .accounts({
         superAdmin: wallet.publicKey,
       })
@@ -79,7 +114,17 @@ async function main() {
     // Verify update
     await new Promise(resolve => setTimeout(resolve, 2000));
     const updatedState = await program.account.adminState.fetch(adminState);
-    console.log("\nUpdated Dongle Proof Collection:", updatedState.dongleProofCollection.toBase58());
+    
+    let updatedCollectionConfig;
+    if (collectionType.og) {
+      updatedCollectionConfig = updatedState.ogCollection;
+    } else if (collectionType.regular) {
+      updatedCollectionConfig = updatedState.regularCollection;
+    } else {
+      updatedCollectionConfig = updatedState.basicCollection;
+    }
+    
+    console.log(`\nUpdated ${collectionName} Collection Mint:`, updatedCollectionConfig.collectionMint.toBase58());
 
   } catch (error: any) {
     console.error("\n❌ Transaction failed!");

@@ -31,5 +31,3 @@ No need to check previous_admin vs new_admin - because this update_admin functio
 ========
 
 Shipping cost should be calculated.
-
-Need to calculate total purchased dongle amount.

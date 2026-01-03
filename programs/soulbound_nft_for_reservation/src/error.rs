@@ -28,8 +28,6 @@ pub enum ProgramErrorCode {
     InvalidWithdrawWallet,
     #[msg("Minting has not started yet")]
     MintNotStarted,
-    #[msg("Dongle purchase has not started yet")]
-    PurchaseNotStarted,
     #[msg("Max supply cannot be less than current reserved count")]
     InvalidMaxSupply,
     #[msg("Invalid super admin - cannot be empty")]
@@ -42,8 +40,6 @@ pub enum ProgramErrorCode {
     SamePaymentMint,
     #[msg("Invalid mint fee - must be greater than 0")]
     InvalidMintFee,
-    #[msg("Invalid dongle price - must be greater than 0")]
-    InvalidDonglePrice,
     #[msg("New withdraw wallet must be different from current")]
     SameWithdrawWallet,
     #[msg("New super admin must be different from current")]
@@ -52,4 +48,6 @@ pub enum ProgramErrorCode {
     InvalidCollection,
     #[msg("Invalid metadata - name, symbol, and URI are required")]
     InvalidMetadata,
+    #[msg("Invalid collection mint - cannot be empty")]
+    InvalidCollectionMint,
 }

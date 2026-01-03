@@ -6,13 +6,12 @@ This directory contains comprehensive tests for the Soulbound NFT smart contract
 
 ### Individual Test Files
 - `1_init_admin.test.ts` - Admin state initialization
+- `2_create_collection.test.ts` - Collection creation
 - `3_update_admin.test.ts` - Admin parameter updates
 - `4_mint_nft.test.ts` - NFT minting functionality
-- `6_withdraw.test.ts` - Fund withdrawal
-- `6_withdraw_all.test.ts` - Complete fund withdrawal
-- `7_burn_nft.test.ts` - NFT burning
-- `8_purchase_dongle.test.ts` - Dongle purchase
-- `9_update_payment_mint.test.ts` - Payment mint updates
+- `5_burn_nft.test.ts` - NFT burning
+- `7_withdraw.test.ts` - Fund withdrawal
+- `8_update_payment_mint.test.ts` - Payment mint updates
 
 ### Comprehensive Test
 - `comprehensive.test.ts` - Complete end-to-end user journey test
@@ -45,14 +44,13 @@ The test suite covers:
 
 ### ✅ Core Functionality
 - **Admin Management**: Initialize and update admin parameters
-- **Collection Creation**: Create OG and Dongle Proof collections
+- **Collection Creation**: Create OG collections
 - **NFT Minting**: Mint NFTs with payment and collection support
-- **Dongle Purchase**: Discounted pricing for NFT holders
 - **NFT Burning**: Complete NFT lifecycle
 - **Fund Management**: Withdrawal functionality
 
 ### ✅ User Journeys
-- **Complete Flow**: Admin setup → Collections → Minting → Purchasing → Burning
+- **Complete Flow**: Admin setup → Collections → Minting → Burning
 - **Error Handling**: Duplicate operations, invalid states
 - **Permission Checks**: Access control validation
 
@@ -92,12 +90,7 @@ The test suite covers:
    - Collection association
    - Burning mechanics
 
-4. **Commerce Logic**
-   - NFT holder discounts
-   - Normal user pricing
-   - Purchase state management
-
-5. **Security & Access Control**
+4. **Security & Access Control**
    - Permission validation
    - Duplicate operation prevention
    - State consistency

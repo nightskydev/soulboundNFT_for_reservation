@@ -1,28 +1,78 @@
 import * as anchor from "@coral-xyz/anchor";
 import { expect } from "chai";
-import { testContext, initializeTestContext, MINT_FEE, MAX_SUPPLY, MINT_START_DATE, DONGLE_PRICE_NFT_HOLDER, DONGLE_PRICE_NORMAL } from "./setup";
+import { 
+  testContext, 
+  initializeTestContext, 
+  OG_MINT_FEE,
+  REGULAR_MINT_FEE,
+  BASIC_MINT_FEE,
+  OG_MAX_SUPPLY,
+  REGULAR_MAX_SUPPLY,
+  BASIC_MAX_SUPPLY,
+  MINT_START_DATE
+} from "./setup";
 import { Keypair, PublicKey } from "@solana/web3.js";
-import { TOKEN_PROGRAM_ID, getAccount, createAssociatedTokenAccount, mintTo } from "@solana/spl-token";
+import { TOKEN_PROGRAM_ID, createMint } from "@solana/spl-token";
+import { BN } from "bn.js";
 
-describe("Complete User Journey (Admin + Commerce)", () => {
+describe("Complete User Journey (Admin + Basic Operations)", () => {
   before(async () => {
     await initializeTestContext();
   });
 
-  it("should complete full admin and commerce journey", async () => {
+  it("should complete full admin and basic operations journey", async () => {
     // ===== PHASE 1: Admin Setup =====
     console.log("🚀 Phase 1: Admin Setup");
 
     // Initialize admin if not done
     if (!testContext.adminInitialized) {
+      // Create collection mints
+      testContext.ogCollectionMint = await createMint(
+        testContext.connection,
+        testContext.admin,
+        testContext.admin.publicKey,
+        testContext.admin.publicKey,
+        0,
+        Keypair.generate(),
+        undefined,
+        TOKEN_PROGRAM_ID
+      );
+
+      testContext.regularCollectionMint = await createMint(
+        testContext.connection,
+        testContext.admin,
+        testContext.admin.publicKey,
+        testContext.admin.publicKey,
+        0,
+        Keypair.generate(),
+        undefined,
+        TOKEN_PROGRAM_ID
+      );
+
+      testContext.basicCollectionMint = await createMint(
+        testContext.connection,
+        testContext.admin,
+        testContext.admin.publicKey,
+        testContext.admin.publicKey,
+        0,
+        Keypair.generate(),
+        undefined,
+        TOKEN_PROGRAM_ID
+      );
+
       const initTx = await testContext.program.methods
         .initAdmin(
-          MINT_FEE,
-          MAX_SUPPLY,
+          testContext.ogCollectionMint,
+          OG_MINT_FEE,
+          OG_MAX_SUPPLY,
+          testContext.regularCollectionMint,
+          REGULAR_MINT_FEE,
+          REGULAR_MAX_SUPPLY,
+          testContext.basicCollectionMint,
+          BASIC_MINT_FEE,
+          BASIC_MAX_SUPPLY,
           testContext.withdrawWallet.publicKey,
-          MINT_START_DATE,
-          DONGLE_PRICE_NFT_HOLDER,
-          DONGLE_PRICE_NORMAL
+          MINT_START_DATE
         )
         .accounts({
           superAdmin: testContext.admin.publicKey,
@@ -50,198 +100,41 @@ describe("Complete User Journey (Admin + Commerce)", () => {
         .rpc();
     }
 
-    // Enable purchases
-    await testContext.program.methods
-      .updatePurchaseStarted(true)
-      .accounts({
-        superAdmin: testContext.admin.publicKey,
-      })
-      .signers([testContext.admin])
-      .rpc();
+    console.log("✅ Admin setup complete");
 
-    console.log("✅ Purchase started enabled");
-
-    // Set reasonable dongle prices for testing
-    await testContext.program.methods
-      .updateDonglePriceNftHolder(new anchor.BN(10000000)) // 10 USDC
-      .accounts({
-        superAdmin: testContext.admin.publicKey,
-      })
-      .signers([testContext.admin])
-      .rpc();
-
-    await testContext.program.methods
-      .updateDonglePriceNormal(new anchor.BN(50000000)) // 50 USDC
-      .accounts({
-        superAdmin: testContext.admin.publicKey,
-      })
-      .signers([testContext.admin])
-      .rpc();
-
-    console.log("✅ Dongle prices updated");
-
-    // ===== PHASE 2: Dongle Purchasing =====
-    console.log("🛒 Phase 2: Dongle Purchasing");
-
-    // Create a new user and make a purchase
-    const newUser = Keypair.generate();
-    await testContext.connection.confirmTransaction(
-      await testContext.connection.requestAirdrop(newUser.publicKey, 10 * anchor.web3.LAMPORTS_PER_SOL)
-    );
-
-    const newUserUsdcAccount = await createAssociatedTokenAccount(
-      testContext.connection,
-      testContext.admin,
-      testContext.usdcMint,
-      newUser.publicKey
-    );
-
-    await mintTo(
-      testContext.connection,
-      testContext.admin,
-      testContext.usdcMint,
-      newUserUsdcAccount,
-      testContext.admin,
-      100000000 // 100 USDC
-    );
-
-    const vaultBalanceBefore = await testContext.getVaultBalance();
-
-    // New user purchases dongle at normal price
-    const purchaseTx = await testContext.program.methods
-      .purchaseDongle()
-      .accounts({
-        buyer: newUser.publicKey,
-        paymentMint: testContext.usdcMint,
-        buyerTokenAccount: newUserUsdcAccount,
-        paymentTokenProgram: TOKEN_PROGRAM_ID,
-      })
-      .signers([newUser])
-      .rpc();
-
-    console.log("✅ User purchased dongle:", purchaseTx);
-
-    // Verify vault balance increased
-    const vaultBalanceAfter = await testContext.getVaultBalance();
-    expect(Number(vaultBalanceAfter)).to.be.greaterThan(Number(vaultBalanceBefore));
-
-    console.log("✅ Vault balance increased by", Number(vaultBalanceAfter - vaultBalanceBefore) / 1000000, "USDC");
-
-    // ===== PHASE 3: Fund Management =====
-    console.log("💰 Phase 3: Fund Management");
-
-    // Check vault balance
-    const vaultBalance = await testContext.getVaultBalance();
-    console.log("💰 Vault balance:", Number(vaultBalance) / 1000000, "USDC");
-
-    // Withdraw some funds
-    const withdrawAmount = vaultBalance / BigInt(2);
-    const withdrawTx = await testContext.program.methods
-      .withdraw(new anchor.BN(withdrawAmount.toString()))
-      .accounts({
-        superAdmin: testContext.admin.publicKey,
-        paymentMint: testContext.usdcMint,
-        withdrawTokenAccount: testContext.adminUsdcAccount,
-        tokenProgram: TOKEN_PROGRAM_ID,
-      })
-      .signers([testContext.admin])
-      .rpc();
-
-    console.log("✅ Withdrew funds:", withdrawTx);
-
-    // Withdraw remaining funds
-    const withdrawAllTx = await testContext.program.methods
-      .withdrawAll()
-      .accounts({
-        superAdmin: testContext.admin.publicKey,
-        paymentMint: testContext.usdcMint,
-        withdrawTokenAccount: testContext.adminUsdcAccount,
-        tokenProgram: TOKEN_PROGRAM_ID,
-      })
-      .signers([testContext.admin])
-      .rpc();
-
-    console.log("✅ Withdrew all remaining funds:", withdrawAllTx);
-
-    // Verify vault is empty
-    const finalVaultBalance = await testContext.getVaultBalance();
-    expect(Number(finalVaultBalance)).to.equal(0);
-
-    // ===== PHASE 4: Admin Update Verification =====
-    console.log("✅ Phase 4: Admin State Verification");
+    // ===== PHASE 2: Admin State Verification =====
+    console.log("✅ Phase 2: Admin State Verification");
 
     const adminState = await testContext.fetchAdminState();
-    expect(adminState.purchaseStarted).to.be.true;
-    expect(adminState.donglePriceNormal.toNumber()).to.equal(50000000);
-    expect(adminState.donglePriceNftHolder.toNumber()).to.equal(10000000);
+    expect(adminState.superAdmin.toString()).to.equal(testContext.admin.publicKey.toString());
+    
+    // Verify collections are set
+    expect(adminState.ogCollection).to.exist;
+    expect(adminState.regularCollection).to.exist;
+    expect(adminState.basicCollection).to.exist;
 
     console.log("🎉 Complete user journey test passed!");
     console.log("📊 Final Statistics:");
-    console.log("   • Dongles purchased: 1");
-    console.log("   • Funds in vault: 0 (all withdrawn)");
+    console.log("   • Admin initialized successfully");
+    console.log("   • Super Admin:", adminState.superAdmin.toBase58());
   });
 
-  it("should handle error scenarios gracefully", async () => {
-    console.log("🧪 Testing error scenarios");
+  it("should handle admin update operations", async () => {
+    console.log("🧪 Testing admin update operations");
 
-    // Disable purchases
+    // Update OG collection mint fee
+    const newMintFee = new anchor.BN(7000000); // 7 USDC
     await testContext.program.methods
-      .updatePurchaseStarted(false)
+      .updateMintFee({ og: {} }, newMintFee)
       .accounts({
         superAdmin: testContext.admin.publicKey,
       })
       .signers([testContext.admin])
       .rpc();
 
-    // Try to purchase dongle when disabled
-    const tempUser = Keypair.generate();
-    await testContext.connection.confirmTransaction(
-      await testContext.connection.requestAirdrop(tempUser.publicKey, 5 * anchor.web3.LAMPORTS_PER_SOL)
-    );
+    const adminState = await testContext.fetchAdminState();
+    expect(adminState.ogCollection.mintFee.toString()).to.equal(newMintFee.toString());
 
-    const tempUserUsdcAccount = await createAssociatedTokenAccount(
-      testContext.connection,
-      testContext.admin,
-      testContext.usdcMint,
-      tempUser.publicKey
-    );
-
-    await mintTo(
-      testContext.connection,
-      testContext.admin,
-      testContext.usdcMint,
-      tempUserUsdcAccount,
-      testContext.admin,
-      100000000 // 100 USDC
-    );
-
-    try {
-      await testContext.program.methods
-        .purchaseDongle()
-        .accounts({
-          buyer: tempUser.publicKey,
-          paymentMint: testContext.usdcMint,
-          buyerTokenAccount: tempUserUsdcAccount,
-          paymentTokenProgram: TOKEN_PROGRAM_ID,
-        })
-        .signers([tempUser])
-        .rpc();
-
-      expect.fail("Should have failed when purchase not started");
-    } catch (error: any) {
-      expect(error.toString()).to.include("PurchaseNotStarted");
-      console.log("✅ Correctly rejected purchase when disabled");
-    }
-
-    // Re-enable purchases
-    await testContext.program.methods
-      .updatePurchaseStarted(true)
-      .accounts({
-        superAdmin: testContext.admin.publicKey,
-      })
-      .signers([testContext.admin])
-      .rpc();
-
-    console.log("✅ Error scenarios handled correctly");
+    console.log("✅ Admin updates handled correctly");
   });
 });

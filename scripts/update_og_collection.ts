@@ -51,7 +51,7 @@ async function main() {
   }
   
   const idl = JSON.parse(fs.readFileSync(idlPath, "utf-8"));
-  const programId = new PublicKey("7nwJWSLt65ZWBzBwSt9FTSF94phiafpj3NYzA7rm2Qb2");
+  const programId = new PublicKey("AzcZ8LcBKu1tT8ahYYqVTbUpfaonJmkGFNnPajYKSW9L");
   const program = new Program<SoulboundNftForReservation>(idl, provider);
 
   // Derive admin state PDA

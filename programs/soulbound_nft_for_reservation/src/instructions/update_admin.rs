@@ -17,22 +17,29 @@ pub struct UpdateAdminInfo<'info> {
     pub admin_state: Box<Account<'info, AdminState>>,
 }
 
-pub fn update_mint_fee_handler(ctx: Context<UpdateAdminInfo>, mint_fee: u64) -> Result<()> {
+pub fn update_mint_fee_handler(ctx: Context<UpdateAdminInfo>, collection_type: crate::state::CollectionType, mint_fee: u64) -> Result<()> {
     require!(mint_fee > 0, ProgramErrorCode::InvalidMintFee);
-    ctx.accounts.admin_state.mint_fee = mint_fee;
-    msg!("Mint fee updated to: {}", mint_fee);
+    
+    let collection_config = ctx.accounts.admin_state.get_collection_config_mut(collection_type);
+    collection_config.mint_fee = mint_fee;
+    
+    msg!("Collection {:?} mint fee updated to: {}", collection_type, mint_fee);
     Ok(())
 }
 
-pub fn update_max_supply_handler(ctx: Context<UpdateAdminInfo>, max_supply: u64) -> Result<()> {
+pub fn update_max_supply_handler(ctx: Context<UpdateAdminInfo>, collection_type: crate::state::CollectionType, max_supply: u64) -> Result<()> {
+    let collection_config = ctx.accounts.admin_state.get_collection_config(collection_type);
+    
     // Validate max_supply is not below current reserved count (0 means unlimited)
     require!(
-        max_supply == 0 || max_supply >= ctx.accounts.admin_state.current_reserved_count,
+        max_supply == 0 || max_supply >= collection_config.current_reserved_count,
         ProgramErrorCode::InvalidMaxSupply
     );
     
-    ctx.accounts.admin_state.max_supply = max_supply;
-    msg!("Max supply updated to: {}", max_supply);
+    let collection_config_mut = ctx.accounts.admin_state.get_collection_config_mut(collection_type);
+    collection_config_mut.max_supply = max_supply;
+    
+    msg!("Collection {:?} max supply updated to: {}", collection_type, max_supply);
     Ok(())
 }
 
@@ -42,47 +49,17 @@ pub fn update_mint_start_date_handler(ctx: Context<UpdateAdminInfo>, mint_start_
     Ok(())
 }
 
-pub fn update_dongle_price_nft_holder_handler(ctx: Context<UpdateAdminInfo>, dongle_price_nft_holder: u64) -> Result<()> {
-    require!(dongle_price_nft_holder > 0, ProgramErrorCode::InvalidDonglePrice);
-    ctx.accounts.admin_state.dongle_price_nft_holder = dongle_price_nft_holder;
-    msg!("Dongle price for NFT holders updated to: {}", dongle_price_nft_holder);
-    Ok(())
-}
-
-pub fn update_dongle_price_normal_handler(ctx: Context<UpdateAdminInfo>, dongle_price_normal: u64) -> Result<()> {
-    require!(dongle_price_normal > 0, ProgramErrorCode::InvalidDonglePrice);
-    ctx.accounts.admin_state.dongle_price_normal = dongle_price_normal;
-    msg!("Dongle price for normal users updated to: {}", dongle_price_normal);
-    Ok(())
-}
-
-pub fn update_purchase_started_handler(ctx: Context<UpdateAdminInfo>, purchase_started: bool) -> Result<()> {
-    ctx.accounts.admin_state.purchase_started = purchase_started;
-    msg!("Purchase started flag updated to: {}", purchase_started);
-    Ok(())
-}
-
-pub fn update_og_collection_handler(ctx: Context<UpdateAdminInfo>, og_collection: Pubkey) -> Result<()> {
-    // Validate that og_collection is not empty
+pub fn update_collection_mint_handler(ctx: Context<UpdateAdminInfo>, collection_type: crate::state::CollectionType, collection_mint: Pubkey) -> Result<()> {
+    // Validate that collection_mint is not empty
     require!(
-        og_collection != Pubkey::default(),
+        collection_mint != Pubkey::default(),
         ProgramErrorCode::InvalidCollection
     );
 
-    ctx.accounts.admin_state.og_collection = og_collection;
-    msg!("OG collection updated to: {}", og_collection);
-    Ok(())
-}
-
-pub fn update_dongle_proof_collection_handler(ctx: Context<UpdateAdminInfo>, dongle_proof_collection: Pubkey) -> Result<()> {
-    // Validate that dongle_proof_collection is not empty
-    require!(
-        dongle_proof_collection != Pubkey::default(),
-        ProgramErrorCode::InvalidCollection
-    );
-
-    ctx.accounts.admin_state.dongle_proof_collection = dongle_proof_collection;
-    msg!("Dongle proof collection updated to: {}", dongle_proof_collection);
+    let collection_config = ctx.accounts.admin_state.get_collection_config_mut(collection_type);
+    collection_config.collection_mint = collection_mint;
+    
+    msg!("Collection {:?} mint updated to: {}", collection_type, collection_mint);
     Ok(())
 }
 

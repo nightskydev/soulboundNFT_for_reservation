@@ -248,8 +248,8 @@ fn verify_creator<'info>(
     Ok(())
 }
 
-pub fn handler(ctx: Context<MintNft>, name: String, symbol: String, uri: String) -> Result<()> {
-    msg!("Mint regular NFT with Metaplex metadata");
+pub fn handler(ctx: Context<MintNft>, collection_type: crate::state::CollectionType, name: String, symbol: String, uri: String) -> Result<()> {
+    msg!("Mint regular NFT with Metaplex metadata for collection type: {:?}", collection_type);
 
     // Check mint start date (0 = no restriction)
     let mint_start_date = ctx.accounts.admin_state.mint_start_date;
@@ -261,20 +261,37 @@ pub fn handler(ctx: Context<MintNft>, name: String, symbol: String, uri: String)
         );
     }
 
+    // Get the specific collection configuration
+    let collection_config = ctx.accounts.admin_state.get_collection_config(collection_type);
+
     // Check max supply (0 = unlimited)
-    let max_supply = ctx.accounts.admin_state.max_supply;
+    let max_supply = collection_config.max_supply;
     if max_supply > 0 {
         require!(
-            ctx.accounts.admin_state.current_reserved_count < max_supply,
+            collection_config.current_reserved_count < max_supply,
             ProgramErrorCode::MaxSupplyReached
         );
     }
+
+    // Validate mint fee
+    require!(
+        collection_config.mint_fee > 0,
+        ProgramErrorCode::InvalidMintFee
+    );
 
     let bump = ctx.bumps.admin_state;
     let signer_seeds: &[&[&[u8]]] = &[&[b"admin_state", &[bump]]];
 
     // Get collection key if provided
     let collection_key = ctx.accounts.collection_mint.as_ref().map(|m| m.key());
+
+    // Validate that provided collection mint matches the collection type
+    if let Some(provided_collection_mint) = &ctx.accounts.collection_mint {
+        require!(
+            provided_collection_mint.key() == collection_config.collection_mint,
+            ProgramErrorCode::InvalidCollection
+        );
+    }
 
     // Create metadata
     create_nft_metadata(
@@ -364,12 +381,6 @@ pub fn handler(ctx: Context<MintNft>, name: String, symbol: String, uri: String)
     )?;
     msg!("Token account frozen - NFT is now soulbound (non-transferable)");
 
-    // Runtime validation: ensure mint fee is valid
-    require!(
-        ctx.accounts.admin_state.mint_fee > 0,
-        ProgramErrorCode::InvalidMintFee
-    );
-
     // Transfer payment tokens from payer to vault
     transfer_checked(
         CpiContext::new(
@@ -381,19 +392,21 @@ pub fn handler(ctx: Context<MintNft>, name: String, symbol: String, uri: String)
                 authority: ctx.accounts.signer.to_account_info(),
             },
         ),
-        ctx.accounts.admin_state.mint_fee,
+        collection_config.mint_fee,
         ctx.accounts.payment_mint.decimals,
     )?;
 
-    // Increment reserved count
-    ctx.accounts.admin_state.current_reserved_count = ctx.accounts.admin_state
+    // Increment reserved count for the specific collection
+    let collection_config_mut = ctx.accounts.admin_state.get_collection_config_mut(collection_type);
+    collection_config_mut.current_reserved_count = collection_config_mut
         .current_reserved_count
         .checked_add(1)
         .ok_or(ProgramErrorCode::ReservedCountOverflow)?;
 
     msg!(
-        "Current reserved count: {}",
-        ctx.accounts.admin_state.current_reserved_count
+        "Collection {:?} - Current reserved count: {}",
+        collection_type,
+        collection_config_mut.current_reserved_count
     );
 
     // Emit event

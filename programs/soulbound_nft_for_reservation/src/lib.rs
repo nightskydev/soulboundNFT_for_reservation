@@ -12,7 +12,7 @@ pub use instructions::*;
 
 pub use crate::error::ProgramErrorCode;
 
-declare_id!("7nwJWSLt65ZWBzBwSt9FTSF94phiafpj3NYzA7rm2Qb2");
+declare_id!("AzcZ8LcBKu1tT8ahYYqVTbUpfaonJmkGFNnPajYKSW9L");
 
 #[program]
 pub mod soulbound_nft_for_reservation {
@@ -20,55 +20,50 @@ pub mod soulbound_nft_for_reservation {
 
     /// Initialize admin state with super_admin (signer)
     pub fn init_admin(
-        ctx: Context<InitAdmin>, 
-        mint_fee: u64, 
-        max_supply: u64, 
-        withdraw_wallet: Pubkey, 
+        ctx: Context<InitAdmin>,
+        // OG Collection parameters
+        og_collection_mint: Pubkey,
+        og_mint_fee: u64,
+        og_max_supply: u64,
+        // Regular Collection parameters
+        regular_collection_mint: Pubkey,
+        regular_mint_fee: u64,
+        regular_max_supply: u64,
+        // Basic Collection parameters
+        basic_collection_mint: Pubkey,
+        basic_mint_fee: u64,
+        basic_max_supply: u64,
+        // Shared parameters
+        withdraw_wallet: Pubkey,
         mint_start_date: i64,
-        dongle_price_nft_holder: u64,
-        dongle_price_normal: u64,
     ) -> Result<()> {
-        instructions::init_admin::handler(ctx, mint_fee, max_supply, withdraw_wallet, mint_start_date, dongle_price_nft_holder, dongle_price_normal)
+        instructions::init_admin::handler(
+            ctx,
+            og_collection_mint, og_mint_fee, og_max_supply,
+            regular_collection_mint, regular_mint_fee, regular_max_supply,
+            basic_collection_mint, basic_mint_fee, basic_max_supply,
+            withdraw_wallet, mint_start_date
+        )
     }
 
-    /// Update mint fee (super_admin only)
-    pub fn update_mint_fee(ctx: Context<UpdateAdminInfo>, mint_fee: u64) -> Result<()> {
-        instructions::update_admin::update_mint_fee_handler(ctx, mint_fee)
+    /// Update mint fee for a specific collection (super_admin only)
+    pub fn update_mint_fee(ctx: Context<UpdateAdminInfo>, collection_type: state::CollectionType, mint_fee: u64) -> Result<()> {
+        instructions::update_admin::update_mint_fee_handler(ctx, collection_type, mint_fee)
     }
 
-    /// Update max supply (super_admin only)
-    pub fn update_max_supply(ctx: Context<UpdateAdminInfo>, max_supply: u64) -> Result<()> {
-        instructions::update_admin::update_max_supply_handler(ctx, max_supply)
+    /// Update max supply for a specific collection (super_admin only)
+    pub fn update_max_supply(ctx: Context<UpdateAdminInfo>, collection_type: state::CollectionType, max_supply: u64) -> Result<()> {
+        instructions::update_admin::update_max_supply_handler(ctx, collection_type, max_supply)
     }
 
-    /// Update mint start date (super_admin only)
+    /// Update mint start date - shared across all collections (super_admin only)
     pub fn update_mint_start_date(ctx: Context<UpdateAdminInfo>, mint_start_date: i64) -> Result<()> {
         instructions::update_admin::update_mint_start_date_handler(ctx, mint_start_date)
     }
 
-    /// Update dongle price for NFT holders (super_admin only)
-    pub fn update_dongle_price_nft_holder(ctx: Context<UpdateAdminInfo>, dongle_price_nft_holder: u64) -> Result<()> {
-        instructions::update_admin::update_dongle_price_nft_holder_handler(ctx, dongle_price_nft_holder)
-    }
-
-    /// Update dongle price for normal users (super_admin only)
-    pub fn update_dongle_price_normal(ctx: Context<UpdateAdminInfo>, dongle_price_normal: u64) -> Result<()> {
-        instructions::update_admin::update_dongle_price_normal_handler(ctx, dongle_price_normal)
-    }
-
-    /// Update purchase started flag (super_admin only)
-    pub fn update_purchase_started(ctx: Context<UpdateAdminInfo>, purchase_started: bool) -> Result<()> {
-        instructions::update_admin::update_purchase_started_handler(ctx, purchase_started)
-    }
-
-    /// Update OG collection address (super_admin only)
-    pub fn update_og_collection(ctx: Context<UpdateAdminInfo>, og_collection: Pubkey) -> Result<()> {
-        instructions::update_admin::update_og_collection_handler(ctx, og_collection)
-    }
-
-    /// Update dongle proof collection address (super_admin only)
-    pub fn update_dongle_proof_collection(ctx: Context<UpdateAdminInfo>, dongle_proof_collection: Pubkey) -> Result<()> {
-        instructions::update_admin::update_dongle_proof_collection_handler(ctx, dongle_proof_collection)
+    /// Update collection mint address for a specific collection (super_admin only)
+    pub fn update_collection_mint(ctx: Context<UpdateAdminInfo>, collection_type: state::CollectionType, collection_mint: Pubkey) -> Result<()> {
+        instructions::update_admin::update_collection_mint_handler(ctx, collection_type, collection_mint)
     }
 
     /// Update withdraw wallet (super_admin only)
@@ -91,16 +86,18 @@ pub mod soulbound_nft_for_reservation {
         instructions::create_collection_nft::handler(ctx, name, symbol, uri)
     }
 
-    pub fn mint_nft(ctx: Context<MintNft>, name: String, symbol: String, uri: String) -> Result<()> {
-        instructions::mint_nft::handler(ctx, name, symbol, uri)
+    /// Mint an NFT in a specific collection
+    pub fn mint_nft(ctx: Context<MintNft>, collection_type: state::CollectionType, name: String, symbol: String, uri: String) -> Result<()> {
+        instructions::mint_nft::handler(ctx, collection_type, name, symbol, uri)
     }
 
     pub fn update_nft_metadata(ctx: Context<UpdateNftMetadata>, name: Option<String>, symbol: Option<String>, uri: Option<String>) -> Result<()> {
         instructions::update_nft_metadata::handler(ctx, name, symbol, uri)
     }
 
-    pub fn burn_nft(ctx: Context<BurnNft>) -> Result<()> {
-        instructions::burn_nft::handler(ctx)
+    /// Burn an NFT from a specific collection
+    pub fn burn_nft(ctx: Context<BurnNft>, collection_type: state::CollectionType) -> Result<()> {
+        instructions::burn_nft::handler(ctx, collection_type)
     }
 
     /// Withdraw payment tokens from the vault (super_admin only)
@@ -111,10 +108,5 @@ pub mod soulbound_nft_for_reservation {
     /// Withdraw all payment tokens from the vault (super_admin only)
     pub fn withdraw_all(ctx: Context<Withdraw>) -> Result<()> {
         instructions::withdraw::withdraw_all_handler(ctx)
-    }
-
-    /// Purchase a dongle - NFT holders pay discounted price, normal users pay full price
-    pub fn purchase_dongle(ctx: Context<PurchaseDongle>) -> Result<()> {
-        instructions::purchase_dongle::handler(ctx)
     }
 }

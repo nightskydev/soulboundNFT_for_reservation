@@ -24,9 +24,9 @@ const COLLECTION_NAME = "Soulbound OG Collection";
 const COLLECTION_SYMBOL = "SBOG";
 const COLLECTION_URI = "https://green-awkward-eagle-887.mypinata.cloud/ipfs/bafkreifipgio6h5rspvmw2mm2f7zbfmktaku7nvsx7wf7rl7zlcw2mvfvu"; // Replace with your metadata URI
 
-// Collection type: "og" or "dongle_proof"
-// After creation, the script will show how to update admin_state with the collection address
-const COLLECTION_TYPE: "og" | "dongle_proof" = "og";
+// Collection type: "og"
+// Note: dongle_proof collection type has been removed
+const COLLECTION_TYPE: "og" = "og";
 
 // ============================================================
 // SCRIPT
@@ -74,7 +74,7 @@ async function main() {
   }
   
   const idl = JSON.parse(fs.readFileSync(idlPath, "utf-8"));
-  const programId = new PublicKey("7nwJWSLt65ZWBzBwSt9FTSF94phiafpj3NYzA7rm2Qb2");
+  const programId = new PublicKey("AzcZ8LcBKu1tT8ahYYqVTbUpfaonJmkGFNnPajYKSW9L");
   const program = new Program<SoulboundNftForReservation>(idl, provider);
 
   console.log("Program ID:", programId.toBase58());
@@ -185,13 +185,8 @@ async function main() {
     // Show next steps
     console.log("\n=== Next Steps ===");
     console.log(`\nTo set this as the ${COLLECTION_TYPE} collection, run:`);
-    if (COLLECTION_TYPE === "og") {
-      console.log(`\n  npx ts-node scripts/update_og_collection.ts ${collectionMint.publicKey.toBase58()}`);
-      console.log("\nOr call update_og_collection instruction with:");
-    } else {
-      console.log(`\n  npx ts-node scripts/update_dongle_proof_collection.ts ${collectionMint.publicKey.toBase58()}`);
-      console.log("\nOr call update_dongle_proof_collection instruction with:");
-    }
+    console.log(`\n  npx ts-node scripts/update_og_collection.ts ${collectionMint.publicKey.toBase58()}`);
+    console.log("\nOr call update_og_collection instruction with:");
     console.log(`  og_collection: ${collectionMint.publicKey.toBase58()}`);
 
     // Save collection mint keypair for reference

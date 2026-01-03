@@ -46,13 +46,22 @@ pub struct InitAdmin<'info> {
 }
 
 pub fn handler(
-    ctx: Context<InitAdmin>, 
-    mint_fee: u64, 
-    max_supply: u64, 
+    ctx: Context<InitAdmin>,
+    // OG Collection parameters
+    og_collection_mint: Pubkey,
+    og_mint_fee: u64,
+    og_max_supply: u64,
+    // Regular Collection parameters
+    regular_collection_mint: Pubkey,
+    regular_mint_fee: u64,
+    regular_max_supply: u64,
+    // Basic Collection parameters
+    basic_collection_mint: Pubkey,
+    basic_mint_fee: u64,
+    basic_max_supply: u64,
+    // Shared parameters
     withdraw_wallet: Pubkey, 
     mint_start_date: i64,
-    dongle_price_nft_holder: u64,
-    dongle_price_normal: u64,
 ) -> Result<()> {
     let super_admin_key = *ctx.accounts.super_admin.key;
 
@@ -62,29 +71,49 @@ pub fn handler(
         ProgramErrorCode::InvalidWithdrawWallet
     );
 
-    // Validate that prices and fees are greater than 0
-    require!(mint_fee > 0, ProgramErrorCode::InvalidMintFee);
-    require!(dongle_price_nft_holder > 0, ProgramErrorCode::InvalidDonglePrice);
-    require!(dongle_price_normal > 0, ProgramErrorCode::InvalidDonglePrice);
+    // Validate that all mint fees are greater than 0
+    require!(og_mint_fee > 0, ProgramErrorCode::InvalidMintFee);
+    require!(regular_mint_fee > 0, ProgramErrorCode::InvalidMintFee);
+    require!(basic_mint_fee > 0, ProgramErrorCode::InvalidMintFee);
+
+    // Validate collection mints are not default
+    require!(og_collection_mint != Pubkey::default(), ProgramErrorCode::InvalidCollectionMint);
+    require!(regular_collection_mint != Pubkey::default(), ProgramErrorCode::InvalidCollectionMint);
+    require!(basic_collection_mint != Pubkey::default(), ProgramErrorCode::InvalidCollectionMint);
 
     ctx.accounts.admin_state.bump = ctx.bumps.admin_state;
     ctx.accounts.admin_state.super_admin = super_admin_key;
     ctx.accounts.admin_state.withdraw_wallet = withdraw_wallet;
-    ctx.accounts.admin_state.mint_fee = mint_fee;
-    ctx.accounts.admin_state.current_reserved_count = 0;
     ctx.accounts.admin_state.payment_mint = ctx.accounts.payment_mint.key();
-    ctx.accounts.admin_state.max_supply = max_supply;
     ctx.accounts.admin_state.mint_start_date = mint_start_date;
-    ctx.accounts.admin_state.dongle_price_nft_holder = dongle_price_nft_holder;
-    ctx.accounts.admin_state.dongle_price_normal = dongle_price_normal;
-    ctx.accounts.admin_state.purchase_started = false; // Disabled by default
-    ctx.accounts.admin_state.og_collection = Pubkey::default(); // Will be set later
-    ctx.accounts.admin_state.dongle_proof_collection = Pubkey::default(); // Will be set later
 
-    msg!("Admin initialized with vault at: {}, max_supply: {}, withdraw_wallet: {}, mint_start_date: {}", 
-        ctx.accounts.vault.key(), max_supply, withdraw_wallet, mint_start_date);
-    msg!("Dongle prices - NFT holder: {}, Normal: {}", dongle_price_nft_holder, dongle_price_normal);
+    // Initialize OG Collection
+    ctx.accounts.admin_state.og_collection = crate::state::CollectionConfig::new(
+        og_collection_mint,
+        og_mint_fee,
+        og_max_supply
+    );
+
+    // Initialize Regular Collection
+    ctx.accounts.admin_state.regular_collection = crate::state::CollectionConfig::new(
+        regular_collection_mint,
+        regular_mint_fee,
+        regular_max_supply
+    );
+
+    // Initialize Basic Collection
+    ctx.accounts.admin_state.basic_collection = crate::state::CollectionConfig::new(
+        basic_collection_mint,
+        basic_mint_fee,
+        basic_max_supply
+    );
+
+    msg!("Admin initialized with vault at: {}", ctx.accounts.vault.key());
     msg!("Super admin: {}", super_admin_key);
+    msg!("Withdraw wallet: {}, mint_start_date: {}", withdraw_wallet, mint_start_date);
+    msg!("OG Collection: {}, fee: {}, max_supply: {}", og_collection_mint, og_mint_fee, og_max_supply);
+    msg!("Regular Collection: {}, fee: {}, max_supply: {}", regular_collection_mint, regular_mint_fee, regular_max_supply);
+    msg!("Basic Collection: {}, fee: {}, max_supply: {}", basic_collection_mint, basic_mint_fee, basic_max_supply);
 
     Ok(())
 }

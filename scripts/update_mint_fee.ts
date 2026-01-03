@@ -11,12 +11,39 @@ const USDC_DECIMALS = 6;
 const MINT_FEE = MINT_FEE_USDC * Math.pow(10, USDC_DECIMALS); // 10000 lamports
 
 async function main() {
-  console.log("\n=== Updating Mint Fee ===\n");
+  console.log("\n=== Updating Mint Fee for a Collection ===\n");
 
-  // Parse command line arguments for custom fee
-  const customFeeUsdc = process.argv[2] ? parseFloat(process.argv[2]) : MINT_FEE_USDC;
+  // Parse command line arguments
+  const collectionTypeArg = process.argv[2];
+  const customFeeUsdc = process.argv[3] ? parseFloat(process.argv[3]) : MINT_FEE_USDC;
+  
+  if (!collectionTypeArg) {
+    console.log("Usage: npx ts-node scripts/update_mint_fee.ts <COLLECTION_TYPE> [FEE_IN_USDC]");
+    console.log("  COLLECTION_TYPE: 'og', 'regular', or 'basic' (required)");
+    console.log("  FEE_IN_USDC: Fee amount in USDC (optional, default: 0.01)");
+    console.log("\nExamples:");
+    console.log("  npx ts-node scripts/update_mint_fee.ts og 5.0");
+    console.log("  npx ts-node scripts/update_mint_fee.ts regular 3.0");
+    console.log("  npx ts-node scripts/update_mint_fee.ts basic 1.0");
+    process.exit(1);
+  }
+
+  // Parse collection type
+  const collectionTypeMap: { [key: string]: any } = {
+    'og': { og: {} },
+    'regular': { regular: {} },
+    'basic': { basic: {} }
+  };
+  
+  const collectionType = collectionTypeMap[collectionTypeArg.toLowerCase()];
+  if (!collectionType) {
+    console.error(`\n❌ Invalid collection type: ${collectionTypeArg}`);
+    console.log("Valid types: og, regular, basic");
+    process.exit(1);
+  }
+
   const mintFee = Math.floor(customFeeUsdc * Math.pow(10, USDC_DECIMALS));
-
+  console.log(`Collection Type: ${collectionTypeArg.toUpperCase()}`);
   console.log(`Setting mint fee to: ${customFeeUsdc} USDC (${mintFee} base units)`);
 
   // Load wallet from default Solana config path
@@ -45,7 +72,7 @@ async function main() {
     throw new Error(`IDL not found at ${idlPath}. Please run 'anchor build' first.`);
   }
   const idl = JSON.parse(fs.readFileSync(idlPath, "utf-8"));
-  const programId = new PublicKey("7nwJWSLt65ZWBzBwSt9FTSF94phiafpj3NYzA7rm2Qb2");
+  const programId = new PublicKey("AzcZ8LcBKu1tT8ahYYqVTbUpfaonJmkGFNnPajYKSW9L");
   const program = new Program<SoulboundNftForReservation>(idl, provider);
 
   console.log("Program ID:", programId.toBase58());
@@ -59,8 +86,23 @@ async function main() {
 
   // Fetch current admin state
   const adminStateBefore = await program.account.adminState.fetch(adminStatePda);
+  
+  // Get the collection config
+  let collectionConfig;
+  let collectionName;
+  if (collectionType.og) {
+    collectionConfig = adminStateBefore.ogCollection;
+    collectionName = "OG";
+  } else if (collectionType.regular) {
+    collectionConfig = adminStateBefore.regularCollection;
+    collectionName = "Regular";
+  } else {
+    collectionConfig = adminStateBefore.basicCollection;
+    collectionName = "Basic";
+  }
+  
   console.log("\n=== Current State ===");
-  console.log("Current Mint Fee:", Number(adminStateBefore.mintFee) / Math.pow(10, USDC_DECIMALS), "USDC");
+  console.log(`Current ${collectionName} Collection mint fee:`, Number(collectionConfig.mintFee) / Math.pow(10, USDC_DECIMALS), "USDC");
   console.log("Super Admin:", adminStateBefore.superAdmin.toBase58());
 
   // Verify caller is super admin
@@ -75,7 +117,7 @@ async function main() {
     console.log("\n⏳ Updating mint fee...");
     
     const tx = await program.methods
-      .updateMintFee(new anchor.BN(mintFee))
+      .updateMintFee(collectionType, new anchor.BN(mintFee))
       .accounts({
         superAdmin: wallet.publicKey,
       })
@@ -89,8 +131,19 @@ async function main() {
     // Verify the update
     await new Promise(resolve => setTimeout(resolve, 2000));
     const adminStateAfter = await program.account.adminState.fetch(adminStatePda);
+    
+    // Get updated collection config
+    let updatedCollectionConfig;
+    if (collectionType.og) {
+      updatedCollectionConfig = adminStateAfter.ogCollection;
+    } else if (collectionType.regular) {
+      updatedCollectionConfig = adminStateAfter.regularCollection;
+    } else {
+      updatedCollectionConfig = adminStateAfter.basicCollection;
+    }
+    
     console.log("\n=== Updated State ===");
-    console.log("New Mint Fee:", Number(adminStateAfter.mintFee) / Math.pow(10, USDC_DECIMALS), "USDC");
+    console.log(`New ${collectionName} Collection mint fee:`, Number(updatedCollectionConfig.mintFee) / Math.pow(10, USDC_DECIMALS), "USDC");
 
   } catch (error: any) {
     console.error("\n❌ Transaction failed!");
