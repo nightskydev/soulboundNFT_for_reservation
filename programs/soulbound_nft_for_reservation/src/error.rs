@@ -56,4 +56,6 @@ pub enum ProgramErrorCode {
     InvalidCollectionMetadata,
     #[msg("Invalid collection master edition account - must be proper PDA")]
     InvalidCollectionMasterEdition,
+    #[msg("User has already minted an NFT - only one NFT per wallet allowed")]
+    UserAlreadyMinted,
 }

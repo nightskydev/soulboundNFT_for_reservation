@@ -20,8 +20,9 @@ const SYSVAR_INSTRUCTIONS_PUBKEY = new PublicKey("Sysvar1nstructions111111111111
 
 describe("mint_nft", () => {
   let user1OgNftMint: Keypair;
-  let user1RegularNftMint: Keypair;
-  let user2BasicNftMint: Keypair;
+  let user2RegularNftMint: Keypair;
+  let user3BasicNftMint: Keypair;
+  let user4OgNftMint: Keypair;
 
   before(async () => {
     await initializeTestContext();
@@ -240,7 +241,7 @@ describe("mint_nft", () => {
       }
     }
 
-    // Fund user1 and user2 with USDC for minting
+    // Fund users with USDC for minting
     await mintTo(
       testContext.provider.connection,
       testContext.admin,
@@ -255,6 +256,24 @@ describe("mint_nft", () => {
       testContext.admin,
       testContext.usdcMint,
       testContext.user2.tokenAccount,
+      testContext.admin,
+      20_000_000 // 20 USDC
+    );
+
+    await mintTo(
+      testContext.provider.connection,
+      testContext.admin,
+      testContext.usdcMint,
+      testContext.user3.tokenAccount,
+      testContext.admin,
+      20_000_000 // 20 USDC
+    );
+
+    await mintTo(
+      testContext.provider.connection,
+      testContext.admin,
+      testContext.usdcMint,
+      testContext.user4.tokenAccount,
       testContext.admin,
       20_000_000 // 20 USDC
     );
@@ -327,15 +346,15 @@ describe("mint_nft", () => {
   });
 
   it("should mint Regular NFT successfully", async () => {
-    user1RegularNftMint = Keypair.generate();
-    
+    user2RegularNftMint = Keypair.generate();
+
     const nftTokenAccount = getAssociatedTokenAddressSync(
-      user1RegularNftMint.publicKey,
-      testContext.user1.keypair.publicKey
+      user2RegularNftMint.publicKey,
+      testContext.user2.keypair.publicKey
     );
 
     const [metadataAccount] = PublicKey.findProgramAddressSync(
-      [Buffer.from("metadata"), METAPLEX_PROGRAM_ID.toBuffer(), user1RegularNftMint.publicKey.toBuffer()],
+      [Buffer.from("metadata"), METAPLEX_PROGRAM_ID.toBuffer(), user2RegularNftMint.publicKey.toBuffer()],
       METAPLEX_PROGRAM_ID
     );
 
@@ -357,12 +376,12 @@ describe("mint_nft", () => {
     await testContext.program.methods
       .mintNft({ regular: {} }, "Regular NFT #1", "REG", "https://example.com/regular1.json")
       .accounts({
-        signer: testContext.user1.keypair.publicKey,
+        signer: testContext.user2.keypair.publicKey,
         tokenAccount: nftTokenAccount,
-        mint: user1RegularNftMint.publicKey,
+        mint: user2RegularNftMint.publicKey,
         metadataAccount: metadataAccount,
         paymentMint: testContext.usdcMint,
-        payerTokenAccount: testContext.user1.tokenAccount,
+        payerTokenAccount: testContext.user2.tokenAccount,
         paymentTokenProgram: TOKEN_PROGRAM_ID,
         collectionMint: testContext.regularCollectionMint,
         collectionMetadata: collectionMetadataAccount,
@@ -370,7 +389,7 @@ describe("mint_nft", () => {
         sysvarInstructions: SYSVAR_INSTRUCTIONS_PUBKEY,
       })
       .preInstructions([modifyComputeUnits])
-      .signers([testContext.user1.keypair, user1RegularNftMint])
+      .signers([testContext.user2.keypair, user2RegularNftMint])
       .rpc();
 
     const tokenAccountInfo = await getAccount(testContext.provider.connection, nftTokenAccount);
@@ -388,15 +407,15 @@ describe("mint_nft", () => {
   });
 
   it("should mint Basic NFT successfully", async () => {
-    user2BasicNftMint = Keypair.generate();
-    
+    user3BasicNftMint = Keypair.generate();
+
     const nftTokenAccount = getAssociatedTokenAddressSync(
-      user2BasicNftMint.publicKey,
-      testContext.user2.keypair.publicKey
+      user3BasicNftMint.publicKey,
+      testContext.user3.keypair.publicKey
     );
 
     const [metadataAccount] = PublicKey.findProgramAddressSync(
-      [Buffer.from("metadata"), METAPLEX_PROGRAM_ID.toBuffer(), user2BasicNftMint.publicKey.toBuffer()],
+      [Buffer.from("metadata"), METAPLEX_PROGRAM_ID.toBuffer(), user3BasicNftMint.publicKey.toBuffer()],
       METAPLEX_PROGRAM_ID
     );
 
@@ -418,12 +437,12 @@ describe("mint_nft", () => {
     await testContext.program.methods
       .mintNft({ basic: {} }, "Basic NFT #1", "BASIC", "https://example.com/basic1.json")
       .accounts({
-        signer: testContext.user2.keypair.publicKey,
+        signer: testContext.user3.keypair.publicKey,
         tokenAccount: nftTokenAccount,
-        mint: user2BasicNftMint.publicKey,
+        mint: user3BasicNftMint.publicKey,
         metadataAccount: metadataAccount,
         paymentMint: testContext.usdcMint,
-        payerTokenAccount: testContext.user2.tokenAccount,
+        payerTokenAccount: testContext.user3.tokenAccount,
         paymentTokenProgram: TOKEN_PROGRAM_ID,
         collectionMint: testContext.basicCollectionMint,
         collectionMetadata: collectionMetadataAccount,
@@ -431,7 +450,7 @@ describe("mint_nft", () => {
         sysvarInstructions: SYSVAR_INSTRUCTIONS_PUBKEY,
       })
       .preInstructions([modifyComputeUnits])
-      .signers([testContext.user2.keypair, user2BasicNftMint])
+      .signers([testContext.user3.keypair, user3BasicNftMint])
       .rpc();
 
     const tokenAccountInfo = await getAccount(testContext.provider.connection, nftTokenAccount);
@@ -448,16 +467,16 @@ describe("mint_nft", () => {
     expect(adminState.basicCollection.currentReservedCount.toNumber()).to.equal(1);
   });
 
-  it("should allow user to mint multiple NFTs from different collections", async () => {
-    const secondOgMint = Keypair.generate();
-    
+  it("should allow user4 to mint another OG NFT (different wallet)", async () => {
+    user4OgNftMint = Keypair.generate();
+
     const nftTokenAccount = getAssociatedTokenAddressSync(
-      secondOgMint.publicKey,
-      testContext.user2.keypair.publicKey
+      user4OgNftMint.publicKey,
+      testContext.user4.keypair.publicKey
     );
 
     const [metadataAccount] = PublicKey.findProgramAddressSync(
-      [Buffer.from("metadata"), METAPLEX_PROGRAM_ID.toBuffer(), secondOgMint.publicKey.toBuffer()],
+      [Buffer.from("metadata"), METAPLEX_PROGRAM_ID.toBuffer(), user4OgNftMint.publicKey.toBuffer()],
       METAPLEX_PROGRAM_ID
     );
 
@@ -475,16 +494,17 @@ describe("mint_nft", () => {
     });
 
     const ogCountBefore = (await testContext.fetchAdminState()).ogCollection.currentReservedCount.toNumber();
+    const vaultBalanceBefore = await testContext.getVaultBalance();
 
     await testContext.program.methods
       .mintNft({ og: {} }, "OG NFT #2", "OG", "https://example.com/og2.json")
       .accounts({
-        signer: testContext.user2.keypair.publicKey,
+        signer: testContext.user4.keypair.publicKey,
         tokenAccount: nftTokenAccount,
-        mint: secondOgMint.publicKey,
+        mint: user4OgNftMint.publicKey,
         metadataAccount: metadataAccount,
         paymentMint: testContext.usdcMint,
-        payerTokenAccount: testContext.user2.tokenAccount,
+        payerTokenAccount: testContext.user4.tokenAccount,
         paymentTokenProgram: TOKEN_PROGRAM_ID,
         collectionMint: testContext.ogCollectionMint,
         collectionMetadata: collectionMetadataAccount,
@@ -492,15 +512,73 @@ describe("mint_nft", () => {
         sysvarInstructions: SYSVAR_INSTRUCTIONS_PUBKEY,
       })
       .preInstructions([modifyComputeUnits])
-      .signers([testContext.user2.keypair, secondOgMint])
+      .signers([testContext.user4.keypair, user4OgNftMint])
       .rpc();
-    
+
     const tokenAccountInfo = await getAccount(testContext.provider.connection, nftTokenAccount);
     expect(Number(tokenAccountInfo.amount)).to.equal(1);
 
-    // Verify OG count increased
+    // Verify OG count increased and payment was received
     const ogCountAfter = (await testContext.fetchAdminState()).ogCollection.currentReservedCount.toNumber();
     expect(ogCountAfter).to.equal(ogCountBefore + 1);
+
+    const vaultBalanceAfter = await testContext.getVaultBalance();
+    expect(Number(vaultBalanceAfter - vaultBalanceBefore)).to.equal(Number(OG_MINT_FEE));
+  });
+
+  it("should prevent user from minting multiple NFTs (one NFT per wallet restriction)", async () => {
+    const secondMint = Keypair.generate();
+
+    const nftTokenAccount = getAssociatedTokenAddressSync(
+      secondMint.publicKey,
+      testContext.user1.keypair.publicKey // Same wallet that already minted an OG NFT
+    );
+
+    const [metadataAccount] = PublicKey.findProgramAddressSync(
+      [Buffer.from("metadata"), METAPLEX_PROGRAM_ID.toBuffer(), secondMint.publicKey.toBuffer()],
+      METAPLEX_PROGRAM_ID
+    );
+
+    const [collectionMetadataAccount] = PublicKey.findProgramAddressSync(
+      [Buffer.from("metadata"), METAPLEX_PROGRAM_ID.toBuffer(), testContext.regularCollectionMint!.toBuffer()],
+      METAPLEX_PROGRAM_ID
+    );
+    const [collectionMasterEditionAccount] = PublicKey.findProgramAddressSync(
+      [Buffer.from("metadata"), METAPLEX_PROGRAM_ID.toBuffer(), testContext.regularCollectionMint!.toBuffer(), Buffer.from("edition")],
+      METAPLEX_PROGRAM_ID
+    );
+
+    const modifyComputeUnits = ComputeBudgetProgram.setComputeUnitLimit({
+      units: 400_000,
+    });
+
+    // This should fail because user1 already minted an NFT
+    try {
+      await testContext.program.methods
+        .mintNft({ regular: {} }, "Regular NFT #2", "REG", "https://example.com/regular2.json")
+        .accounts({
+          signer: testContext.user1.keypair.publicKey, // Same user that already minted
+          tokenAccount: nftTokenAccount,
+          mint: secondMint.publicKey,
+          metadataAccount: metadataAccount,
+          paymentMint: testContext.usdcMint,
+          payerTokenAccount: testContext.user1.tokenAccount,
+          paymentTokenProgram: TOKEN_PROGRAM_ID,
+          collectionMint: testContext.regularCollectionMint,
+          collectionMetadata: collectionMetadataAccount,
+          collectionMasterEdition: collectionMasterEditionAccount,
+          sysvarInstructions: SYSVAR_INSTRUCTIONS_PUBKEY,
+        })
+        .preInstructions([modifyComputeUnits])
+        .signers([testContext.user1.keypair, secondMint])
+        .rpc();
+
+      // If we reach here, the test should fail
+      expect.fail("Expected minting to fail for user who already minted an NFT");
+    } catch (error: any) {
+      // Verify the error is the expected UserAlreadyMinted error
+      expect(error.message).to.include("UserAlreadyMinted");
+    }
   });
 
   it("should verify mint start date can be set to future", async () => {

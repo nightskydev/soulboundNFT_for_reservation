@@ -122,6 +122,17 @@ pub struct MintNft<'info> {
     /// CHECK: Sysvar instructions account - required for creator and collection verification
     #[account(address = solana_program::sysvar::instructions::ID)]
     pub sysvar_instructions: UncheckedAccount<'info>,
+
+    // === User State ===
+    /// User state account to track if wallet has already minted an NFT
+    #[account(
+        init_if_needed,
+        payer = signer,
+        space = UserState::space(),
+        seeds = [b"user_state", signer.key().as_ref()],
+        bump,
+    )]
+    pub user_state: Account<'info, UserState>,
 }
 
 #[inline(never)]
@@ -269,6 +280,9 @@ fn verify_creator<'info>(
 
 pub fn handler(ctx: Context<MintNft>, collection_type: crate::state::CollectionType, name: String, symbol: String, uri: String) -> Result<()> {
     msg!("Mint regular NFT with Metaplex metadata for collection type: {:?}", collection_type);
+
+    // Check if user has already minted an NFT (one NFT per wallet restriction)
+    require!(!ctx.accounts.user_state.has_minted, ProgramErrorCode::UserAlreadyMinted);
 
     // Check mint start date (0 = no restriction)
     let mint_start_date = ctx.accounts.admin_state.mint_start_date;
@@ -468,11 +482,24 @@ pub fn handler(ctx: Context<MintNft>, collection_type: crate::state::CollectionT
         collection_config_mut.current_reserved_count
     );
 
+    // Initialize user state to prevent further minting
+    let clock = Clock::get()?;
+    ctx.accounts.user_state.set_inner(UserState {
+        user: ctx.accounts.signer.key(),
+        has_minted: true,
+        collection_type,
+        mint_address: ctx.accounts.mint.key(),
+        minted_at: clock.unix_timestamp,
+        bump: ctx.bumps.user_state,
+    });
+
+    msg!("User state initialized - user can no longer mint NFTs");
+
     // Emit event
     emit!(MintNftEvent {
         user: ctx.accounts.signer.key(),
         mint_address: ctx.accounts.mint.key(),
-        timestamp: Clock::get()?.unix_timestamp,
+        timestamp: clock.unix_timestamp,
     });
 
     Ok(())

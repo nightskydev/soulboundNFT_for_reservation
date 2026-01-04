@@ -21,7 +21,9 @@ describe("burn_nft", () => {
   let burnOgNftMint: Keypair;
   let burnRegularNftMint: Keypair;
   let burnBasicNftMint: Keypair;
-  let burnTestUser: { keypair: Keypair; tokenAccount: PublicKey };
+  let burnOgUser: { keypair: Keypair; tokenAccount: PublicKey };
+  let burnRegularUser: { keypair: Keypair; tokenAccount: PublicKey };
+  let burnBasicUser: { keypair: Keypair; tokenAccount: PublicKey };
 
   before(async () => {
     await initializeTestContext();
@@ -236,151 +238,193 @@ describe("burn_nft", () => {
       }
     }
 
-    // Create a dedicated user for burn tests
-    const keypair = Keypair.generate();
-    await testContext.airdropSol(keypair.publicKey, 5);
-    const tokenAccount = await createAssociatedTokenAccount(
-      testContext.provider.connection,
-      testContext.admin,
-      testContext.usdcMint,
-      keypair.publicKey
-    );
-    burnTestUser = { keypair, tokenAccount };
-    
-    // Fund with USDC
-    await mintTo(
-      testContext.provider.connection,
-      testContext.admin,
-      testContext.usdcMint,
-      burnTestUser.tokenAccount,
-      testContext.admin,
-      30_000_000 // 30 USDC to cover all mints
-    );
-
-    // Mint one NFT from each collection for burning tests
+    // Create separate users for each NFT type to comply with one-NFT-per-wallet restriction
     const modifyComputeUnits = ComputeBudgetProgram.setComputeUnitLimit({
       units: 400_000,
     });
 
-    // Mint OG NFT
-    burnOgNftMint = Keypair.generate();
-    const ogNftTokenAccount = getAssociatedTokenAddressSync(
-      burnOgNftMint.publicKey,
-      burnTestUser.keypair.publicKey
-    );
-    const [ogMetadataAccount] = PublicKey.findProgramAddressSync(
-      [Buffer.from("metadata"), METAPLEX_PROGRAM_ID.toBuffer(), burnOgNftMint.publicKey.toBuffer()],
-      METAPLEX_PROGRAM_ID
-    );
-    const [ogCollectionMetadata] = PublicKey.findProgramAddressSync(
-      [Buffer.from("metadata"), METAPLEX_PROGRAM_ID.toBuffer(), testContext.ogCollectionMint!.toBuffer()],
-      METAPLEX_PROGRAM_ID
-    );
-    const [ogCollectionMasterEdition] = PublicKey.findProgramAddressSync(
-      [Buffer.from("metadata"), METAPLEX_PROGRAM_ID.toBuffer(), testContext.ogCollectionMint!.toBuffer(), Buffer.from("edition")],
-      METAPLEX_PROGRAM_ID
-    );
+    // Create OG user and mint OG NFT
+    {
+      const keypair = Keypair.generate();
+      await testContext.airdropSol(keypair.publicKey, 5);
+      const tokenAccount = await createAssociatedTokenAccount(
+        testContext.provider.connection,
+        testContext.admin,
+        testContext.usdcMint,
+        keypair.publicKey
+      );
+      burnOgUser = { keypair, tokenAccount };
 
-    await testContext.program.methods
-      .mintNft({ og: {} }, "OG Burn Test", "OGBURN", "https://example.com/og-burn.json")
-      .accounts({
-        signer: burnTestUser.keypair.publicKey,
-        tokenAccount: ogNftTokenAccount,
-        mint: burnOgNftMint.publicKey,
-        metadataAccount: ogMetadataAccount,
-        paymentMint: testContext.usdcMint,
-        payerTokenAccount: burnTestUser.tokenAccount,
-        paymentTokenProgram: TOKEN_PROGRAM_ID,
-        collectionMint: testContext.ogCollectionMint,
-        collectionMetadata: ogCollectionMetadata,
-        collectionMasterEdition: ogCollectionMasterEdition,
-        sysvarInstructions: SYSVAR_INSTRUCTIONS_PUBKEY,
-      })
-      .preInstructions([modifyComputeUnits])
-      .signers([burnTestUser.keypair, burnOgNftMint])
-      .rpc();
+      await mintTo(
+        testContext.provider.connection,
+        testContext.admin,
+        testContext.usdcMint,
+        burnOgUser.tokenAccount,
+        testContext.admin,
+        10_000_000 // 10 USDC
+      );
 
-    // Mint Regular NFT
-    burnRegularNftMint = Keypair.generate();
-    const regularNftTokenAccount = getAssociatedTokenAddressSync(
-      burnRegularNftMint.publicKey,
-      burnTestUser.keypair.publicKey
-    );
-    const [regularMetadataAccount] = PublicKey.findProgramAddressSync(
-      [Buffer.from("metadata"), METAPLEX_PROGRAM_ID.toBuffer(), burnRegularNftMint.publicKey.toBuffer()],
-      METAPLEX_PROGRAM_ID
-    );
-    const [regularCollectionMetadata] = PublicKey.findProgramAddressSync(
-      [Buffer.from("metadata"), METAPLEX_PROGRAM_ID.toBuffer(), testContext.regularCollectionMint!.toBuffer()],
-      METAPLEX_PROGRAM_ID
-    );
-    const [regularCollectionMasterEdition] = PublicKey.findProgramAddressSync(
-      [Buffer.from("metadata"), METAPLEX_PROGRAM_ID.toBuffer(), testContext.regularCollectionMint!.toBuffer(), Buffer.from("edition")],
-      METAPLEX_PROGRAM_ID
-    );
+      burnOgNftMint = Keypair.generate();
+      const ogNftTokenAccount = getAssociatedTokenAddressSync(
+        burnOgNftMint.publicKey,
+        burnOgUser.keypair.publicKey
+      );
+      const [ogMetadataAccount] = PublicKey.findProgramAddressSync(
+        [Buffer.from("metadata"), METAPLEX_PROGRAM_ID.toBuffer(), burnOgNftMint.publicKey.toBuffer()],
+        METAPLEX_PROGRAM_ID
+      );
+      const [ogCollectionMetadata] = PublicKey.findProgramAddressSync(
+        [Buffer.from("metadata"), METAPLEX_PROGRAM_ID.toBuffer(), testContext.ogCollectionMint!.toBuffer()],
+        METAPLEX_PROGRAM_ID
+      );
+      const [ogCollectionMasterEdition] = PublicKey.findProgramAddressSync(
+        [Buffer.from("metadata"), METAPLEX_PROGRAM_ID.toBuffer(), testContext.ogCollectionMint!.toBuffer(), Buffer.from("edition")],
+        METAPLEX_PROGRAM_ID
+      );
 
-    await testContext.program.methods
-      .mintNft({ regular: {} }, "Regular Burn Test", "REGBURN", "https://example.com/reg-burn.json")
-      .accounts({
-        signer: burnTestUser.keypair.publicKey,
-        tokenAccount: regularNftTokenAccount,
-        mint: burnRegularNftMint.publicKey,
-        metadataAccount: regularMetadataAccount,
-        paymentMint: testContext.usdcMint,
-        payerTokenAccount: burnTestUser.tokenAccount,
-        paymentTokenProgram: TOKEN_PROGRAM_ID,
-        collectionMint: testContext.regularCollectionMint,
-        collectionMetadata: regularCollectionMetadata,
-        collectionMasterEdition: regularCollectionMasterEdition,
-        sysvarInstructions: SYSVAR_INSTRUCTIONS_PUBKEY,
-      })
-      .preInstructions([modifyComputeUnits])
-      .signers([burnTestUser.keypair, burnRegularNftMint])
-      .rpc();
+      await testContext.program.methods
+        .mintNft({ og: {} }, "OG Burn Test", "OGBURN", "https://example.com/og-burn.json")
+        .accounts({
+          signer: burnOgUser.keypair.publicKey,
+          tokenAccount: ogNftTokenAccount,
+          mint: burnOgNftMint.publicKey,
+          metadataAccount: ogMetadataAccount,
+          paymentMint: testContext.usdcMint,
+          payerTokenAccount: burnOgUser.tokenAccount,
+          paymentTokenProgram: TOKEN_PROGRAM_ID,
+          collectionMint: testContext.ogCollectionMint,
+          collectionMetadata: ogCollectionMetadata,
+          collectionMasterEdition: ogCollectionMasterEdition,
+          sysvarInstructions: SYSVAR_INSTRUCTIONS_PUBKEY,
+        })
+        .preInstructions([modifyComputeUnits])
+        .signers([burnOgUser.keypair, burnOgNftMint])
+        .rpc();
+    }
 
-    // Mint Basic NFT
-    burnBasicNftMint = Keypair.generate();
-    const basicNftTokenAccount = getAssociatedTokenAddressSync(
-      burnBasicNftMint.publicKey,
-      burnTestUser.keypair.publicKey
-    );
-    const [basicMetadataAccount] = PublicKey.findProgramAddressSync(
-      [Buffer.from("metadata"), METAPLEX_PROGRAM_ID.toBuffer(), burnBasicNftMint.publicKey.toBuffer()],
-      METAPLEX_PROGRAM_ID
-    );
-    const [basicCollectionMetadata] = PublicKey.findProgramAddressSync(
-      [Buffer.from("metadata"), METAPLEX_PROGRAM_ID.toBuffer(), testContext.basicCollectionMint!.toBuffer()],
-      METAPLEX_PROGRAM_ID
-    );
-    const [basicCollectionMasterEdition] = PublicKey.findProgramAddressSync(
-      [Buffer.from("metadata"), METAPLEX_PROGRAM_ID.toBuffer(), testContext.basicCollectionMint!.toBuffer(), Buffer.from("edition")],
-      METAPLEX_PROGRAM_ID
-    );
+    // Create Regular user and mint Regular NFT
+    {
+      const keypair = Keypair.generate();
+      await testContext.airdropSol(keypair.publicKey, 5);
+      const tokenAccount = await createAssociatedTokenAccount(
+        testContext.provider.connection,
+        testContext.admin,
+        testContext.usdcMint,
+        keypair.publicKey
+      );
+      burnRegularUser = { keypair, tokenAccount };
 
-    await testContext.program.methods
-      .mintNft({ basic: {} }, "Basic Burn Test", "BASICBURN", "https://example.com/basic-burn.json")
-      .accounts({
-        signer: burnTestUser.keypair.publicKey,
-        tokenAccount: basicNftTokenAccount,
-        mint: burnBasicNftMint.publicKey,
-        metadataAccount: basicMetadataAccount,
-        paymentMint: testContext.usdcMint,
-        payerTokenAccount: burnTestUser.tokenAccount,
-        paymentTokenProgram: TOKEN_PROGRAM_ID,
-        collectionMint: testContext.basicCollectionMint,
-        collectionMetadata: basicCollectionMetadata,
-        collectionMasterEdition: basicCollectionMasterEdition,
-        sysvarInstructions: SYSVAR_INSTRUCTIONS_PUBKEY,
-      })
-      .preInstructions([modifyComputeUnits])
-      .signers([burnTestUser.keypair, burnBasicNftMint])
-      .rpc();
+      await mintTo(
+        testContext.provider.connection,
+        testContext.admin,
+        testContext.usdcMint,
+        burnRegularUser.tokenAccount,
+        testContext.admin,
+        10_000_000 // 10 USDC
+      );
+
+      burnRegularNftMint = Keypair.generate();
+      const regularNftTokenAccount = getAssociatedTokenAddressSync(
+        burnRegularNftMint.publicKey,
+        burnRegularUser.keypair.publicKey
+      );
+      const [regularMetadataAccount] = PublicKey.findProgramAddressSync(
+        [Buffer.from("metadata"), METAPLEX_PROGRAM_ID.toBuffer(), burnRegularNftMint.publicKey.toBuffer()],
+        METAPLEX_PROGRAM_ID
+      );
+      const [regularCollectionMetadata] = PublicKey.findProgramAddressSync(
+        [Buffer.from("metadata"), METAPLEX_PROGRAM_ID.toBuffer(), testContext.regularCollectionMint!.toBuffer()],
+        METAPLEX_PROGRAM_ID
+      );
+      const [regularCollectionMasterEdition] = PublicKey.findProgramAddressSync(
+        [Buffer.from("metadata"), METAPLEX_PROGRAM_ID.toBuffer(), testContext.regularCollectionMint!.toBuffer(), Buffer.from("edition")],
+        METAPLEX_PROGRAM_ID
+      );
+
+      await testContext.program.methods
+        .mintNft({ regular: {} }, "Regular Burn Test", "REGBURN", "https://example.com/reg-burn.json")
+        .accounts({
+          signer: burnRegularUser.keypair.publicKey,
+          tokenAccount: regularNftTokenAccount,
+          mint: burnRegularNftMint.publicKey,
+          metadataAccount: regularMetadataAccount,
+          paymentMint: testContext.usdcMint,
+          payerTokenAccount: burnRegularUser.tokenAccount,
+          paymentTokenProgram: TOKEN_PROGRAM_ID,
+          collectionMint: testContext.regularCollectionMint,
+          collectionMetadata: regularCollectionMetadata,
+          collectionMasterEdition: regularCollectionMasterEdition,
+          sysvarInstructions: SYSVAR_INSTRUCTIONS_PUBKEY,
+        })
+        .preInstructions([modifyComputeUnits])
+        .signers([burnRegularUser.keypair, burnRegularNftMint])
+        .rpc();
+    }
+
+    // Create Basic user and mint Basic NFT
+    {
+      const keypair = Keypair.generate();
+      await testContext.airdropSol(keypair.publicKey, 5);
+      const tokenAccount = await createAssociatedTokenAccount(
+        testContext.provider.connection,
+        testContext.admin,
+        testContext.usdcMint,
+        keypair.publicKey
+      );
+      burnBasicUser = { keypair, tokenAccount };
+
+      await mintTo(
+        testContext.provider.connection,
+        testContext.admin,
+        testContext.usdcMint,
+        burnBasicUser.tokenAccount,
+        testContext.admin,
+        10_000_000 // 10 USDC
+      );
+
+      burnBasicNftMint = Keypair.generate();
+      const basicNftTokenAccount = getAssociatedTokenAddressSync(
+        burnBasicNftMint.publicKey,
+        burnBasicUser.keypair.publicKey
+      );
+      const [basicMetadataAccount] = PublicKey.findProgramAddressSync(
+        [Buffer.from("metadata"), METAPLEX_PROGRAM_ID.toBuffer(), burnBasicNftMint.publicKey.toBuffer()],
+        METAPLEX_PROGRAM_ID
+      );
+      const [basicCollectionMetadata] = PublicKey.findProgramAddressSync(
+        [Buffer.from("metadata"), METAPLEX_PROGRAM_ID.toBuffer(), testContext.basicCollectionMint!.toBuffer()],
+        METAPLEX_PROGRAM_ID
+      );
+      const [basicCollectionMasterEdition] = PublicKey.findProgramAddressSync(
+        [Buffer.from("metadata"), METAPLEX_PROGRAM_ID.toBuffer(), testContext.basicCollectionMint!.toBuffer(), Buffer.from("edition")],
+        METAPLEX_PROGRAM_ID
+      );
+
+      await testContext.program.methods
+        .mintNft({ basic: {} }, "Basic Burn Test", "BASICBURN", "https://example.com/basic-burn.json")
+        .accounts({
+          signer: burnBasicUser.keypair.publicKey,
+          tokenAccount: basicNftTokenAccount,
+          mint: burnBasicNftMint.publicKey,
+          metadataAccount: basicMetadataAccount,
+          paymentMint: testContext.usdcMint,
+          payerTokenAccount: burnBasicUser.tokenAccount,
+          paymentTokenProgram: TOKEN_PROGRAM_ID,
+          collectionMint: testContext.basicCollectionMint,
+          collectionMetadata: basicCollectionMetadata,
+          collectionMasterEdition: basicCollectionMasterEdition,
+          sysvarInstructions: SYSVAR_INSTRUCTIONS_PUBKEY,
+        })
+        .preInstructions([modifyComputeUnits])
+        .signers([burnBasicUser.keypair, burnBasicNftMint])
+        .rpc();
+    }
   });
 
   it("should burn OG NFT successfully", async () => {
     const nftTokenAccount = getAssociatedTokenAddressSync(
       burnOgNftMint.publicKey,
-      burnTestUser.keypair.publicKey
+      burnOgUser.keypair.publicKey
     );
 
     // Get OG collection count before
@@ -390,12 +434,12 @@ describe("burn_nft", () => {
     await testContext.program.methods
       .burnNft({ og: {} })
       .accounts({
-        signer: burnTestUser.keypair.publicKey,
+        signer: burnOgUser.keypair.publicKey,
         oldTokenAccount: nftTokenAccount,
         oldMint: burnOgNftMint.publicKey,
         metadataAccount: null,
       })
-      .signers([burnTestUser.keypair])
+      .signers([burnOgUser.keypair])
       .rpc();
 
     // Verify OG collection count decreased
@@ -414,7 +458,7 @@ describe("burn_nft", () => {
   it("should burn Regular NFT successfully", async () => {
     const nftTokenAccount = getAssociatedTokenAddressSync(
       burnRegularNftMint.publicKey,
-      burnTestUser.keypair.publicKey
+      burnRegularUser.keypair.publicKey
     );
 
     // Get Regular collection count before
@@ -424,12 +468,12 @@ describe("burn_nft", () => {
     await testContext.program.methods
       .burnNft({ regular: {} })
       .accounts({
-        signer: burnTestUser.keypair.publicKey,
+        signer: burnRegularUser.keypair.publicKey,
         oldTokenAccount: nftTokenAccount,
         oldMint: burnRegularNftMint.publicKey,
         metadataAccount: null,
       })
-      .signers([burnTestUser.keypair])
+      .signers([burnRegularUser.keypair])
       .rpc();
 
     // Verify Regular collection count decreased
@@ -440,7 +484,7 @@ describe("burn_nft", () => {
   it("should burn Basic NFT successfully", async () => {
     const nftTokenAccount = getAssociatedTokenAddressSync(
       burnBasicNftMint.publicKey,
-      burnTestUser.keypair.publicKey
+      burnBasicUser.keypair.publicKey
     );
 
     // Get Basic collection count before
@@ -450,12 +494,12 @@ describe("burn_nft", () => {
     await testContext.program.methods
       .burnNft({ basic: {} })
       .accounts({
-        signer: burnTestUser.keypair.publicKey,
+        signer: burnBasicUser.keypair.publicKey,
         oldTokenAccount: nftTokenAccount,
         oldMint: burnBasicNftMint.publicKey,
         metadataAccount: null,
       })
-      .signers([burnTestUser.keypair])
+      .signers([burnBasicUser.keypair])
       .rpc();
 
     // Verify Basic collection count decreased

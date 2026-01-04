@@ -44,6 +44,8 @@ class TestContext {
   public admin: Keypair;
   public user1: TestUser;
   public user2: TestUser;
+  public user3: TestUser;
+  public user4: TestUser;
 
   // Tokens
   public usdcMint: PublicKey;
@@ -127,6 +129,8 @@ class TestContext {
     // Create test users (now that USDC mint exists)
     this.user1 = await this.createTestUser(5); // 5 SOL
     this.user2 = await this.createTestUser(5); // 5 SOL
+    this.user3 = await this.createTestUser(5); // 5 SOL
+    this.user4 = await this.createTestUser(5); // 5 SOL
 
     // Derive PDAs
     [this.adminStatePda, this.adminStateBump] = PublicKey.findProgramAddressSync(
