@@ -59,10 +59,7 @@ pub fn handler(ctx: Context<Withdraw>, amount: u64) -> Result<()> {
 
     // Validate amount
     require!(amount > 0, ProgramErrorCode::InvalidWithdrawAmount);
-    require!(
-        vault_balance_before >= amount,
-        ProgramErrorCode::InsufficientVaultBalance
-    );
+    require!(vault_balance_before >= amount, ProgramErrorCode::InsufficientVaultBalance);
 
     // Create signer seeds for admin_state PDA
     let seeds = b"admin_state";
@@ -108,10 +105,7 @@ pub fn withdraw_all_handler(ctx: Context<Withdraw>) -> Result<()> {
         vault_balance, ctx.accounts.admin_state.withdraw_wallet);
 
     // Validate that vault has balance
-    require!(
-        vault_balance > 0,
-        ProgramErrorCode::InsufficientVaultBalance
-    );
+    require!(vault_balance > 0, ProgramErrorCode::InsufficientVaultBalance);
 
     // Create signer seeds for admin_state PDA
     let seeds = b"admin_state";
