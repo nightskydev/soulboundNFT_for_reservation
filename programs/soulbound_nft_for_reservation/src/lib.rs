@@ -91,6 +91,11 @@ pub mod soulbound_nft_for_reservation {
         instructions::mint_nft::handler(ctx, collection_type, name, symbol, uri)
     }
 
+    /// Admin mint an NFT for a specific recipient (airdrop) - super_admin only
+    pub fn admin_mint_nft(ctx: Context<AdminMintNft>, collection_type: state::CollectionType, name: String, symbol: String, uri: String) -> Result<()> {
+        instructions::admin_mint_nft::handler(ctx, collection_type, name, symbol, uri)
+    }
+
     pub fn update_nft_metadata(ctx: Context<UpdateNftMetadata>, name: Option<String>, symbol: Option<String>, uri: Option<String>) -> Result<()> {
         instructions::update_nft_metadata::handler(ctx, name, symbol, uri)
     }

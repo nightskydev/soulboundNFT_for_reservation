@@ -96,8 +96,6 @@ async function main() {
         superAdmin: wallet.publicKey,
         mint: nftMint,
         metadataAccount: metadataAccount,
-        adminState: adminStatePda,
-        tokenMetadataProgram: TOKEN_METADATA_PROGRAM_ID,
       })
       .rpc();
 

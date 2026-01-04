@@ -22,17 +22,17 @@ const PAYMENT_DECIMALS = 6; // USDC has 6 decimals
 // OG Collection parameters
 const OG_COLLECTION_MINT = Keypair.generate().publicKey;
 const OG_MINT_FEE = 5_000_000; // 5 USDC (5 * 10^6)
-const OG_MAX_SUPPLY = 100; // Maximum 100 OG NFTs
+const OG_MAX_SUPPLY = 2026; // Maximum 2026 OG NFTs (26 airdrops + 2000 purchases)
 
 // Regular Collection parameters
 const REGULAR_COLLECTION_MINT = Keypair.generate().publicKey;
 const REGULAR_MINT_FEE = 3_000_000; // 3 USDC (3 * 10^6)
-const REGULAR_MAX_SUPPLY = 500; // Maximum 500 Regular NFTs
+const REGULAR_MAX_SUPPLY = 0; // Unlimited Regular NFTs
 
 // Basic Collection parameters
 const BASIC_COLLECTION_MINT = Keypair.generate().publicKey;
 const BASIC_MINT_FEE = 1_000_000; // 1 USDC (1 * 10^6)
-const BASIC_MAX_SUPPLY = 1000; // Maximum 1000 Basic NFTs
+const BASIC_MAX_SUPPLY = 0; // Unlimited Basic NFTs
 
 // Shared parameters
 const MINT_START_DATE = 0; // 0 = no time restriction, or set Unix timestamp

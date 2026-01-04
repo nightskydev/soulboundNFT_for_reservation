@@ -1,0 +1,368 @@
+use anchor_lang::prelude::*;
+use anchor_spl::{
+    associated_token::{self, AssociatedToken},
+    token::{self, Token, Mint},
+};
+use mpl_token_metadata::{
+    instructions::{
+        CreateMetadataAccountV3, CreateMetadataAccountV3InstructionArgs,
+        VerifyCollectionV1, VerifyCreatorV1,
+    },
+    types::{DataV2, Creator},
+};
+use solana_program::program::invoke_signed;
+
+use crate::error::ProgramErrorCode;
+use crate::state::*;
+
+// Event definition
+#[event]
+pub struct AdminMintNftEvent {
+    pub recipient: Pubkey,
+    pub mint_address: Pubkey,
+    pub admin: Pubkey,
+    pub timestamp: i64,
+}
+
+#[derive(Accounts)]
+pub struct AdminMintNft<'info> {
+    #[account(mut)]
+    pub admin: Signer<'info>,
+
+    /// CHECK: The recipient who will receive the NFT
+    pub recipient: UncheckedAccount<'info>,
+
+    pub system_program: Program<'info, System>,
+    pub token_program: Program<'info, Token>,
+
+    /// CHECK: We will create this one for the recipient
+    #[account(mut)]
+    pub recipient_token_account: UncheckedAccount<'info>,
+
+    #[account(
+        init,
+        payer = admin,
+        mint::decimals = 0,
+        mint::authority = admin_state,
+        mint::freeze_authority = admin_state,
+    )]
+    pub mint: Box<Account<'info, Mint>>,
+
+    pub rent: Sysvar<'info, Rent>,
+    pub associated_token_program: Program<'info, AssociatedToken>,
+
+    /// CHECK: Metaplex Token Metadata program - validated by address
+    #[account(address = mpl_token_metadata::ID)]
+    pub token_metadata_program: UncheckedAccount<'info>,
+
+    /// CHECK: Metadata account - validated by Metaplex program during CPI
+    #[account(mut)]
+    pub metadata_account: UncheckedAccount<'info>,
+
+    #[account(
+        mut,
+        seeds = [b"admin_state".as_ref()],
+        bump,
+        constraint = admin.key() == admin_state.super_admin @ ProgramErrorCode::Unauthorized
+    )]
+    pub admin_state: Box<Account<'info, AdminState>>,
+
+    // === Optional Collection ===
+    /// CHECK: Optional collection mint account for grouping NFTs
+    pub collection_mint: Option<UncheckedAccount<'info>>,
+
+    /// CHECK: Optional collection metadata account - required if collection_mint is provided
+    #[account(mut)]
+    pub collection_metadata: Option<UncheckedAccount<'info>>,
+
+    /// CHECK: Optional collection master edition account - required if collection_mint is provided
+    pub collection_master_edition: Option<UncheckedAccount<'info>>,
+
+    /// CHECK: Sysvar instructions account - required for creator and collection verification
+    #[account(address = solana_program::sysvar::instructions::ID)]
+    pub sysvar_instructions: UncheckedAccount<'info>,
+}
+
+#[inline(never)]
+fn create_nft_metadata<'info>(
+    metadata_account: &AccountInfo<'info>,
+    mint: &AccountInfo<'info>,
+    admin_state: &AccountInfo<'info>,
+    admin_account: &AccountInfo<'info>,
+    system_program: &AccountInfo<'info>,
+    rent: &AccountInfo<'info>,
+    name: String,
+    symbol: String,
+    uri: String,
+    collection_key: Option<Pubkey>,
+    signer_seeds: &[&[&[u8]]],
+) -> Result<()> {
+    let create_metadata_ix = CreateMetadataAccountV3 {
+        metadata: metadata_account.key(),
+        mint: mint.key(),
+        mint_authority: admin_state.key(),
+        update_authority: (admin_state.key(), true),
+        payer: admin_account.key(),
+        system_program: system_program.key(),
+        rent: Some(rent.key()),
+    };
+
+    let data = DataV2 {
+        name,
+        symbol,
+        uri,
+        seller_fee_basis_points: 0,
+        creators: Some(vec![Creator {
+            address: admin_state.key(),
+            verified: false,
+            share: 100,
+        }]),
+        collection: collection_key.map(|key| mpl_token_metadata::types::Collection {
+            verified: false,
+            key,
+        }),
+        uses: None,
+    };
+
+    let args = CreateMetadataAccountV3InstructionArgs {
+        data,
+        is_mutable: true,
+        collection_details: None,
+    };
+
+    let ix = create_metadata_ix.instruction(args);
+
+    invoke_signed(
+        &ix,
+        &[
+            metadata_account.clone(),
+            mint.clone(),
+            admin_state.clone(),
+            admin_account.clone(),
+            system_program.clone(),
+            rent.clone(),
+        ],
+        signer_seeds,
+    )?;
+
+    Ok(())
+}
+
+#[inline(never)]
+fn verify_collection<'info>(
+    metadata_account: &AccountInfo<'info>,
+    collection_mint: &AccountInfo<'info>,
+    collection_metadata: &AccountInfo<'info>,
+    collection_master_edition: &AccountInfo<'info>,
+    admin_state: &AccountInfo<'info>,
+    system_program: &AccountInfo<'info>,
+    sysvar_instructions: &AccountInfo<'info>,
+    signer_seeds: &[&[&[u8]]],
+) -> Result<()> {
+    let verify_collection_ix = VerifyCollectionV1 {
+        authority: admin_state.key(),
+        delegate_record: None,
+        metadata: metadata_account.key(),
+        collection_mint: collection_mint.key(),
+        collection_metadata: Some(collection_metadata.key()),
+        collection_master_edition: Some(collection_master_edition.key()),
+        system_program: system_program.key(),
+        sysvar_instructions: sysvar_instructions.key(),
+    };
+
+    let ix = verify_collection_ix.instruction();
+
+    invoke_signed(
+        &ix,
+        &[
+            admin_state.clone(),
+            metadata_account.clone(),
+            collection_mint.clone(),
+            collection_metadata.clone(),
+            collection_master_edition.clone(),
+            system_program.clone(),
+            sysvar_instructions.clone(),
+        ],
+        signer_seeds,
+    )?;
+
+    msg!("Collection verified successfully");
+    Ok(())
+}
+
+#[inline(never)]
+fn verify_creator<'info>(
+    metadata_account: &AccountInfo<'info>,
+    admin_state: &AccountInfo<'info>,
+    system_program: &AccountInfo<'info>,
+    sysvar_instructions: &AccountInfo<'info>,
+    signer_seeds: &[&[&[u8]]],
+) -> Result<()> {
+    let verify_creator_ix = VerifyCreatorV1 {
+        authority: admin_state.key(),
+        delegate_record: None,
+        metadata: metadata_account.key(),
+        collection_mint: None,
+        collection_metadata: None,
+        collection_master_edition: None,
+        system_program: system_program.key(),
+        sysvar_instructions: sysvar_instructions.key(),
+    };
+
+    let ix = verify_creator_ix.instruction();
+
+    invoke_signed(
+        &ix,
+        &[
+            admin_state.clone(),
+            metadata_account.clone(),
+            system_program.clone(),
+            sysvar_instructions.clone(),
+        ],
+        signer_seeds,
+    )?;
+
+    msg!("Creator verified successfully");
+    Ok(())
+}
+
+pub fn handler(ctx: Context<AdminMintNft>, collection_type: crate::state::CollectionType, name: String, symbol: String, uri: String) -> Result<()> {
+    msg!("Admin minting NFT for collection type: {:?} to recipient: {}", collection_type, ctx.accounts.recipient.key());
+
+    // Get the specific collection configuration
+    let collection_config = ctx.accounts.admin_state.get_collection_config(collection_type);
+
+    // Check max supply (0 = unlimited)
+    let max_supply = collection_config.max_supply;
+    if max_supply > 0 {
+        require!(
+            collection_config.current_reserved_count < max_supply,
+            ProgramErrorCode::MaxSupplyReached
+        );
+    }
+
+    let bump = ctx.bumps.admin_state;
+    let signer_seeds: &[&[&[u8]]] = &[&[b"admin_state", &[bump]]];
+
+    // Get collection key if provided
+    let collection_key = ctx.accounts.collection_mint.as_ref().map(|m| m.key());
+
+    // Validate that provided collection mint matches the collection type
+    if let Some(provided_collection_mint) = &ctx.accounts.collection_mint {
+        require!(
+            provided_collection_mint.key() == collection_config.collection_mint,
+            ProgramErrorCode::InvalidCollection
+        );
+    }
+
+    // Create metadata
+    create_nft_metadata(
+        &ctx.accounts.metadata_account.to_account_info(),
+        &ctx.accounts.mint.to_account_info(),
+        &ctx.accounts.admin_state.to_account_info(),
+        &ctx.accounts.admin.to_account_info(),
+        &ctx.accounts.system_program.to_account_info(),
+        &ctx.accounts.rent.to_account_info(),
+        name,
+        symbol,
+        uri,
+        collection_key,
+        signer_seeds,
+    )?;
+
+    // Verify creator (admin_state PDA is the creator)
+    verify_creator(
+        &ctx.accounts.metadata_account.to_account_info(),
+        &ctx.accounts.admin_state.to_account_info(),
+        &ctx.accounts.system_program.to_account_info(),
+        &ctx.accounts.sysvar_instructions.to_account_info(),
+        signer_seeds,
+    )?;
+
+    // Verify collection if provided
+    if let (
+        Some(collection_mint),
+        Some(collection_metadata),
+        Some(collection_master_edition),
+    ) = (
+        &ctx.accounts.collection_mint,
+        &ctx.accounts.collection_metadata,
+        &ctx.accounts.collection_master_edition,
+    ) {
+        verify_collection(
+            &ctx.accounts.metadata_account.to_account_info(),
+            &collection_mint.to_account_info(),
+            &collection_metadata.to_account_info(),
+            &collection_master_edition.to_account_info(),
+            &ctx.accounts.admin_state.to_account_info(),
+            &ctx.accounts.system_program.to_account_info(),
+            &ctx.accounts.sysvar_instructions.to_account_info(),
+            signer_seeds,
+        )?;
+    }
+
+    // Create the associated token account for the recipient
+    associated_token::create(CpiContext::new(
+        ctx.accounts.associated_token_program.to_account_info(),
+        associated_token::Create {
+            payer: ctx.accounts.admin.to_account_info(),
+            associated_token: ctx.accounts.recipient_token_account.to_account_info(),
+            authority: ctx.accounts.recipient.to_account_info(), // The recipient owns the token account
+            mint: ctx.accounts.mint.to_account_info(),
+            system_program: ctx.accounts.system_program.to_account_info(),
+            token_program: ctx.accounts.token_program.to_account_info(),
+        },
+    ))?;
+
+    // Mint one token to the recipient's associated token account
+    token::mint_to(
+        CpiContext::new_with_signer(
+            ctx.accounts.token_program.to_account_info(),
+            token::MintTo {
+                mint: ctx.accounts.mint.to_account_info(),
+                to: ctx.accounts.recipient_token_account.to_account_info(),
+                authority: ctx.accounts.admin_state.to_account_info(),
+            },
+            signer_seeds,
+        ),
+        1,
+    )?;
+
+    // **FREEZE THE TOKEN ACCOUNT TO MAKE IT NON-TRANSFERABLE (SOULBOUND)**
+    // Once frozen, the token account cannot transfer tokens, making the NFT soulbound
+    token::freeze_account(
+        CpiContext::new_with_signer(
+            ctx.accounts.token_program.to_account_info(),
+            token::FreezeAccount {
+                account: ctx.accounts.recipient_token_account.to_account_info(),
+                mint: ctx.accounts.mint.to_account_info(),
+                authority: ctx.accounts.admin_state.to_account_info(),
+            },
+            signer_seeds,
+        ),
+    )?;
+    msg!("Token account frozen - NFT is now soulbound (non-transferable)");
+
+    // Increment reserved count for the specific collection
+    let collection_config_mut = ctx.accounts.admin_state.get_collection_config_mut(collection_type);
+    collection_config_mut.current_reserved_count = collection_config_mut
+        .current_reserved_count
+        .checked_add(1)
+        .ok_or(ProgramErrorCode::ReservedCountOverflow)?;
+
+    msg!(
+        "Collection {:?} - Current reserved count: {}",
+        collection_type,
+        collection_config_mut.current_reserved_count
+    );
+
+    // Emit event
+    emit!(AdminMintNftEvent {
+        recipient: ctx.accounts.recipient.key(),
+        mint_address: ctx.accounts.mint.key(),
+        admin: ctx.accounts.admin.key(),
+        timestamp: Clock::get()?.unix_timestamp,
+    });
+
+    Ok(())
+}

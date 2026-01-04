@@ -1,3 +1,4 @@
+pub mod admin_mint_nft;
 pub mod burn_nft;
 pub mod create_collection_nft;
 pub mod init_admin;
@@ -8,6 +9,7 @@ pub mod update_payment_mint;
 pub mod update_withdraw_wallet;
 pub mod withdraw;
 
+pub use admin_mint_nft::*;
 pub use burn_nft::*;
 pub use create_collection_nft::*;
 pub use init_admin::*;

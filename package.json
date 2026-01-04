@@ -6,6 +6,8 @@
         "test:comprehensive": "npx ts-mocha -p ./tsconfig.json -t 1000000 tests/core-functionality.test.ts",
         "init-admin": "ts-node scripts/init_admin.ts",
         "create-collection": "ts-node scripts/create_collection.ts",
+        "mint-nft": "ts-node scripts/mint_nft.ts",
+        "admin-mint-nft": "ts-node scripts/admin_mint_nft.ts",
         "query-presale": "ts-node scripts/query_presale_purchasers.ts",
         "parse-sig": "ts-node scripts/parse_signature.ts"
     },
