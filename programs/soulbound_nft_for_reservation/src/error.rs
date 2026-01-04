@@ -12,6 +12,8 @@ pub enum ProgramErrorCode {
     ReservedCountUnderflow,
     #[msg("Invalid admin account")]
     InvalidAdminAccount,
+    #[msg("Admin state not initialized - super_admin is not set")]
+    AdminNotInitialized,
     #[msg("Invalid payment mint - does not match admin_state.payment_mint")]
     InvalidPaymentMint,
     #[msg("Invalid payment token account")]
@@ -50,4 +52,8 @@ pub enum ProgramErrorCode {
     InvalidMetadata,
     #[msg("Invalid collection mint - cannot be empty")]
     InvalidCollectionMint,
+    #[msg("Invalid collection metadata account - must be proper PDA")]
+    InvalidCollectionMetadata,
+    #[msg("Invalid collection master edition account - must be proper PDA")]
+    InvalidCollectionMasterEdition,
 }
