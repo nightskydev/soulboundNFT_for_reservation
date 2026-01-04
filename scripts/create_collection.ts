@@ -20,8 +20,8 @@ import * as os from "os";
 const TOKEN_METADATA_PROGRAM_ID = new PublicKey("metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s");
 
 // Collection metadata - MODIFY THESE FOR YOUR COLLECTION
-const COLLECTION_NAME = "Soulbound OG Collection";
-const COLLECTION_SYMBOL = "SBOG";
+const COLLECTION_NAME = "AuthEnTHICator OG Collection";
+const COLLECTION_SYMBOL = "AUTH";
 const COLLECTION_URI = "https://green-awkward-eagle-887.mypinata.cloud/ipfs/bafkreifipgio6h5rspvmw2mm2f7zbfmktaku7nvsx7wf7rl7zlcw2mvfvu"; // Replace with your metadata URI
 
 // Collection type: "og"

@@ -90,20 +90,6 @@ async function main() {
   console.log("Payment Mint:", PAYMENT_MINT.toBase58());
   console.log("Withdraw Wallet:", WITHDRAW_WALLET.toBase58());
 
-  // Validate addresses
-  if (WITHDRAW_WALLET.toBase58() === "YOUR_WITHDRAW_WALLET_ADDRESS_HERE") {
-    throw new Error("\n❌ Please set WITHDRAW_WALLET to a valid address in the script!");
-  }
-  if (OG_COLLECTION_MINT.toBase58() === "YOUR_OG_COLLECTION_MINT_HERE") {
-    throw new Error("\n❌ Please set OG_COLLECTION_MINT to a valid address in the script!");
-  }
-  if (REGULAR_COLLECTION_MINT.toBase58() === "YOUR_REGULAR_COLLECTION_MINT_HERE") {
-    throw new Error("\n❌ Please set REGULAR_COLLECTION_MINT to a valid address in the script!");
-  }
-  if (BASIC_COLLECTION_MINT.toBase58() === "YOUR_BASIC_COLLECTION_MINT_HERE") {
-    throw new Error("\n❌ Please set BASIC_COLLECTION_MINT to a valid address in the script!");
-  }
-
   // Derive PDAs
   const [adminState] = PublicKey.findProgramAddressSync(
     [Buffer.from("admin_state")],
