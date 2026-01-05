@@ -236,10 +236,6 @@ describe("withdraw", () => {
       [Buffer.from("metadata"), METAPLEX_PROGRAM_ID.toBuffer(), ogCollectionMint.toBuffer(), Buffer.from("edition")],
       METAPLEX_PROGRAM_ID
     );
-    const [collectionStatePda] = PublicKey.findProgramAddressSync(
-      [Buffer.from("collection"), ogCollectionMint.toBuffer()],
-      testContext.program.programId
-    );
 
     await testContext.program.methods
       .mintNft({ og: {} }, "Test NFT", "TEST", "https://example.com/nft.json")

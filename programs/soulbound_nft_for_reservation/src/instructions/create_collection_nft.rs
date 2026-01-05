@@ -62,15 +62,6 @@ pub struct CreateCollectionNft<'info> {
     pub master_edition_account: UncheckedAccount<'info>,
 
     #[account(
-        init,
-        seeds = [b"collection".as_ref(), collection_mint.key().as_ref()],
-        bump,
-        payer = signer,
-        space = CollectionState::space()
-    )]
-    pub collection_state: Box<Account<'info, CollectionState>>,
-
-    #[account(
         mut,
         seeds = [b"admin_state".as_ref()],
         bump,
@@ -236,16 +227,8 @@ pub fn handler(ctx: Context<CreateCollectionNft>, name: String, symbol: String, 
         signer_seeds,
     )?;
 
-    // Store collection info
-    let clock = Clock::get()?;
-    ctx.accounts.collection_state.collection_mint = ctx.accounts.collection_mint.key();
-    ctx.accounts.collection_state.name = name.clone();
-    ctx.accounts.collection_state.symbol = symbol.clone();
-    ctx.accounts.collection_state.uri = uri.clone();
-    ctx.accounts.collection_state.created_at = clock.unix_timestamp;
-    ctx.accounts.collection_state.is_verified = true;
-
     // Emit event
+    let clock = Clock::get()?;
     emit!(CreateCollectionEvent {
         collection_mint: ctx.accounts.collection_mint.key(),
         name,

@@ -122,13 +122,6 @@ async function main() {
   );
   console.log("Master Edition PDA:", masterEditionAccount.toBase58());
 
-  // Derive collection state PDA
-  const [collectionState] = PublicKey.findProgramAddressSync(
-    [Buffer.from("collection"), collectionMint.publicKey.toBuffer()],
-    programId
-  );
-  console.log("Collection State PDA:", collectionState.toBase58());
-
   // Derive collection token account (ATA for admin_state to hold the 1 collection NFT)
   const collectionTokenAccount = getAssociatedTokenAddressSync(
     collectionMint.publicKey,
@@ -168,19 +161,6 @@ async function main() {
     console.log("✅ Transaction successful!");
     console.log("Transaction signature:", tx);
     console.log(`View on Solana Explorer: https://explorer.solana.com/tx/${tx}?cluster=devnet`);
-
-    // Wait for confirmation
-    await new Promise(resolve => setTimeout(resolve, 2000));
-
-    // Verify the collection state
-    const state = await program.account.collectionState.fetch(collectionState);
-    console.log("\n=== Verified Collection State ===");
-    console.log("Collection Mint:", state.collectionMint.toBase58());
-    console.log("Name:", state.name);
-    console.log("Symbol:", state.symbol);
-    console.log("URI:", state.uri);
-    console.log("Created At:", new Date(state.createdAt.toNumber() * 1000).toISOString());
-    console.log("Is Verified:", state.isVerified);
 
     // Show next steps
     console.log("\n=== Next Steps ===");

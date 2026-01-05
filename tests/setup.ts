@@ -218,15 +218,6 @@ class TestContext {
     return await this.program.account.adminState.fetch(this.adminStatePda);
   }
 
-  // Helper to fetch collection state
-  public async fetchCollectionState(collectionMint: PublicKey): Promise<any> {
-    const [collectionStatePda] = PublicKey.findProgramAddressSync(
-      [Buffer.from("collection"), collectionMint.toBuffer()],
-      this.program.programId
-    );
-    return await this.program.account.collectionState.fetch(collectionStatePda);
-  }
-
   // Helper to mint USDC to a user
   public async mintUsdcTo(destination: PublicKey, amount: number): Promise<void> {
     await mintTo(
