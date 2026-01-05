@@ -23,16 +23,19 @@ const PAYMENT_DECIMALS = 6; // USDC has 6 decimals
 const OG_COLLECTION_MINT = Keypair.generate().publicKey;
 const OG_MINT_FEE = 5_000_000; // 5 USDC (5 * 10^6)
 const OG_MAX_SUPPLY = 2026; // Maximum 2026 OG NFTs (26 airdrops + 2000 purchases)
+const OG_ADMIN_MINT_LIMIT = 26; // Admin can mint 26 OG NFTs
 
 // Regular Collection parameters
 const REGULAR_COLLECTION_MINT = Keypair.generate().publicKey;
 const REGULAR_MINT_FEE = 3_000_000; // 3 USDC (3 * 10^6)
 const REGULAR_MAX_SUPPLY = 0; // Unlimited Regular NFTs
+const REGULAR_ADMIN_MINT_LIMIT = 0; // Admin cannot mint Regular NFTs
 
 // Basic Collection parameters
 const BASIC_COLLECTION_MINT = Keypair.generate().publicKey;
 const BASIC_MINT_FEE = 1_000_000; // 1 USDC (1 * 10^6)
 const BASIC_MAX_SUPPLY = 0; // Unlimited Basic NFTs
+const BASIC_ADMIN_MINT_LIMIT = 0; // Admin cannot mint Basic NFTs
 
 // Shared parameters
 const MINT_START_DATE = 0; // 0 = no time restriction, or set Unix timestamp
@@ -115,17 +118,23 @@ async function main() {
     console.log("  - Mint:", existingState.ogCollection.collectionMint.toBase58());
     console.log("  - Fee:", existingState.ogCollection.mintFee.toString());
     console.log("  - Max Supply:", existingState.ogCollection.maxSupply.toString());
-    console.log("  - Current Count:", existingState.ogCollection.currentReservedCount.toString());
+    console.log("  - Admin Mint Limit:", existingState.ogCollection.adminMintLimit.toString());
+    console.log("  - Current Reserved Count:", existingState.ogCollection.currentReservedCount.toString());
+    console.log("  - Current Admin Mint Count:", existingState.ogCollection.currentAdminMintCount.toString());
     console.log("\nRegular Collection:");
     console.log("  - Mint:", existingState.regularCollection.collectionMint.toBase58());
     console.log("  - Fee:", existingState.regularCollection.mintFee.toString());
     console.log("  - Max Supply:", existingState.regularCollection.maxSupply.toString());
-    console.log("  - Current Count:", existingState.regularCollection.currentReservedCount.toString());
+    console.log("  - Admin Mint Limit:", existingState.regularCollection.adminMintLimit.toString());
+    console.log("  - Current Reserved Count:", existingState.regularCollection.currentReservedCount.toString());
+    console.log("  - Current Admin Mint Count:", existingState.regularCollection.currentAdminMintCount.toString());
     console.log("\nBasic Collection:");
     console.log("  - Mint:", existingState.basicCollection.collectionMint.toBase58());
     console.log("  - Fee:", existingState.basicCollection.mintFee.toString());
     console.log("  - Max Supply:", existingState.basicCollection.maxSupply.toString());
-    console.log("  - Current Count:", existingState.basicCollection.currentReservedCount.toString());
+    console.log("  - Admin Mint Limit:", existingState.basicCollection.adminMintLimit.toString());
+    console.log("  - Current Reserved Count:", existingState.basicCollection.currentReservedCount.toString());
+    console.log("  - Current Admin Mint Count:", existingState.basicCollection.currentAdminMintCount.toString());
     return;
   } catch (e) {
     // Account doesn't exist, continue with initialization
@@ -138,14 +147,17 @@ async function main() {
   console.log("  - Mint:", OG_COLLECTION_MINT.toBase58());
   console.log("  - Fee:", OG_MINT_FEE / 10 ** PAYMENT_DECIMALS, "USDC");
   console.log("  - Max Supply:", OG_MAX_SUPPLY);
+  console.log("  - Admin Mint Limit:", OG_ADMIN_MINT_LIMIT);
   console.log("Regular Collection:");
   console.log("  - Mint:", REGULAR_COLLECTION_MINT.toBase58());
   console.log("  - Fee:", REGULAR_MINT_FEE / 10 ** PAYMENT_DECIMALS, "USDC");
   console.log("  - Max Supply:", REGULAR_MAX_SUPPLY);
+  console.log("  - Admin Mint Limit:", REGULAR_ADMIN_MINT_LIMIT);
   console.log("Basic Collection:");
   console.log("  - Mint:", BASIC_COLLECTION_MINT.toBase58());
   console.log("  - Fee:", BASIC_MINT_FEE / 10 ** PAYMENT_DECIMALS, "USDC");
   console.log("  - Max Supply:", BASIC_MAX_SUPPLY);
+  console.log("  - Admin Mint Limit:", BASIC_ADMIN_MINT_LIMIT);
   console.log("Shared:");
   console.log("  - Withdraw Wallet:", WITHDRAW_WALLET.toBase58());
   console.log("  - Mint Start Date:", MINT_START_DATE === 0 ? "No restriction" : new Date(MINT_START_DATE * 1000).toISOString());
@@ -157,12 +169,15 @@ async function main() {
         OG_COLLECTION_MINT,
         new anchor.BN(OG_MINT_FEE),
         new anchor.BN(OG_MAX_SUPPLY),
+        new anchor.BN(OG_ADMIN_MINT_LIMIT),
         REGULAR_COLLECTION_MINT,
         new anchor.BN(REGULAR_MINT_FEE),
         new anchor.BN(REGULAR_MAX_SUPPLY),
+        new anchor.BN(REGULAR_ADMIN_MINT_LIMIT),
         BASIC_COLLECTION_MINT,
         new anchor.BN(BASIC_MINT_FEE),
         new anchor.BN(BASIC_MAX_SUPPLY),
+        new anchor.BN(BASIC_ADMIN_MINT_LIMIT),
         WITHDRAW_WALLET,
         new anchor.BN(MINT_START_DATE)
       )
@@ -191,19 +206,25 @@ async function main() {
     console.log("  - Mint:", state.ogCollection.collectionMint.toBase58());
     console.log("  - Fee:", state.ogCollection.mintFee.toString(), `(${state.ogCollection.mintFee.toNumber() / 10 ** PAYMENT_DECIMALS} USDC)`);
     console.log("  - Max Supply:", state.ogCollection.maxSupply.toString());
-    console.log("  - Current Count:", state.ogCollection.currentReservedCount.toString());
-    
+    console.log("  - Admin Mint Limit:", state.ogCollection.adminMintLimit.toString());
+    console.log("  - Current Reserved Count:", state.ogCollection.currentReservedCount.toString());
+    console.log("  - Current Admin Mint Count:", state.ogCollection.currentAdminMintCount.toString());
+
     console.log("\nRegular Collection:");
     console.log("  - Mint:", state.regularCollection.collectionMint.toBase58());
     console.log("  - Fee:", state.regularCollection.mintFee.toString(), `(${state.regularCollection.mintFee.toNumber() / 10 ** PAYMENT_DECIMALS} USDC)`);
     console.log("  - Max Supply:", state.regularCollection.maxSupply.toString());
-    console.log("  - Current Count:", state.regularCollection.currentReservedCount.toString());
-    
+    console.log("  - Admin Mint Limit:", state.regularCollection.adminMintLimit.toString());
+    console.log("  - Current Reserved Count:", state.regularCollection.currentReservedCount.toString());
+    console.log("  - Current Admin Mint Count:", state.regularCollection.currentAdminMintCount.toString());
+
     console.log("\nBasic Collection:");
     console.log("  - Mint:", state.basicCollection.collectionMint.toBase58());
     console.log("  - Fee:", state.basicCollection.mintFee.toString(), `(${state.basicCollection.mintFee.toNumber() / 10 ** PAYMENT_DECIMALS} USDC)`);
     console.log("  - Max Supply:", state.basicCollection.maxSupply.toString());
-    console.log("  - Current Count:", state.basicCollection.currentReservedCount.toString());
+    console.log("  - Admin Mint Limit:", state.basicCollection.adminMintLimit.toString());
+    console.log("  - Current Reserved Count:", state.basicCollection.currentReservedCount.toString());
+    console.log("  - Current Admin Mint Count:", state.basicCollection.currentAdminMintCount.toString());
 
   } catch (error: any) {
     console.error("\n❌ Transaction failed!");

@@ -1,14 +1,17 @@
 import * as anchor from "@coral-xyz/anchor";
 import { expect } from "chai";
-import { 
-  testContext, 
-  initializeTestContext, 
+import {
+  testContext,
+  initializeTestContext,
   OG_MINT_FEE,
   REGULAR_MINT_FEE,
   BASIC_MINT_FEE,
   OG_MAX_SUPPLY,
   REGULAR_MAX_SUPPLY,
   BASIC_MAX_SUPPLY,
+  OG_ADMIN_MINT_LIMIT,
+  REGULAR_ADMIN_MINT_LIMIT,
+  BASIC_ADMIN_MINT_LIMIT,
   MINT_START_DATE
 } from "./setup";
 import { Keypair, PublicKey, ComputeBudgetProgram } from "@solana/web3.js";
@@ -40,12 +43,15 @@ describe("burn_nft", () => {
           ogCollectionMintKeypair.publicKey,
           OG_MINT_FEE,
           OG_MAX_SUPPLY,
+          OG_ADMIN_MINT_LIMIT,
           regularCollectionMintKeypair.publicKey,
           REGULAR_MINT_FEE,
           REGULAR_MAX_SUPPLY,
+          REGULAR_ADMIN_MINT_LIMIT,
           basicCollectionMintKeypair.publicKey,
           BASIC_MINT_FEE,
           BASIC_MAX_SUPPLY,
+          BASIC_ADMIN_MINT_LIMIT,
           testContext.withdrawWallet.publicKey,
           MINT_START_DATE
         )

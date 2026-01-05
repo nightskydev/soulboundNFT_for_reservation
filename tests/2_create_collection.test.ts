@@ -1,6 +1,6 @@
 import * as anchor from "@coral-xyz/anchor";
 import { expect } from "chai";
-import { testContext, initializeTestContext, MINT_FEE, MAX_SUPPLY, MINT_START_DATE } from "./setup";
+import { testContext, initializeTestContext, OG_MINT_FEE, OG_MAX_SUPPLY, OG_ADMIN_MINT_LIMIT, REGULAR_MINT_FEE, REGULAR_MAX_SUPPLY, REGULAR_ADMIN_MINT_LIMIT, BASIC_MINT_FEE, BASIC_MAX_SUPPLY, BASIC_ADMIN_MINT_LIMIT, MINT_START_DATE } from "./setup";
 import { Keypair, PublicKey, ComputeBudgetProgram } from "@solana/web3.js";
 import { TOKEN_PROGRAM_ID, getAssociatedTokenAddressSync, ASSOCIATED_TOKEN_PROGRAM_ID } from "@solana/spl-token";
 
@@ -14,10 +14,24 @@ describe("create_collection_nft", () => {
 
     // Initialize admin if not already done
     if (!testContext.adminInitialized) {
+      const ogCollectionMint = Keypair.generate().publicKey;
+      const regularCollectionMint = Keypair.generate().publicKey;
+      const basicCollectionMint = Keypair.generate().publicKey;
+
       await testContext.program.methods
         .initAdmin(
-          MINT_FEE,
-          MAX_SUPPLY,
+          ogCollectionMint,
+          OG_MINT_FEE,
+          OG_MAX_SUPPLY,
+          OG_ADMIN_MINT_LIMIT,
+          regularCollectionMint,
+          REGULAR_MINT_FEE,
+          REGULAR_MAX_SUPPLY,
+          REGULAR_ADMIN_MINT_LIMIT,
+          basicCollectionMint,
+          BASIC_MINT_FEE,
+          BASIC_MAX_SUPPLY,
+          BASIC_ADMIN_MINT_LIMIT,
           testContext.withdrawWallet.publicKey,
           MINT_START_DATE
         )

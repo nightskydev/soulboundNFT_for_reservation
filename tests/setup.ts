@@ -20,10 +20,13 @@ import { BN } from "bn.js";
 // Test constants
 export const OG_MINT_FEE = new BN(5000000); // 5 USDC (6 decimals)
 export const OG_MAX_SUPPLY = new BN(100);
+export const OG_ADMIN_MINT_LIMIT = new BN(26); // Admin can mint 26 OG NFTs
 export const REGULAR_MINT_FEE = new BN(3000000); // 3 USDC
 export const REGULAR_MAX_SUPPLY = new BN(500);
+export const REGULAR_ADMIN_MINT_LIMIT = new BN(0); // Admin cannot mint Regular NFTs
 export const BASIC_MINT_FEE = new BN(1000000); // 1 USDC
 export const BASIC_MAX_SUPPLY = new BN(1000);
+export const BASIC_ADMIN_MINT_LIMIT = new BN(0); // Admin cannot mint Basic NFTs
 export const MINT_START_DATE = new BN(0); // No restriction for tests
 
 // Test users
@@ -267,18 +270,24 @@ export const assertAdminState = async (
       mintFee: BN;
       maxSupply: BN;
       currentReservedCount: BN;
+      adminMintLimit?: BN;
+      currentAdminMintCount?: BN;
     };
     regularCollection: {
       collectionMint: PublicKey;
       mintFee: BN;
       maxSupply: BN;
       currentReservedCount: BN;
+      adminMintLimit?: BN;
+      currentAdminMintCount?: BN;
     };
     basicCollection: {
       collectionMint: PublicKey;
       mintFee: BN;
       maxSupply: BN;
       currentReservedCount: BN;
+      adminMintLimit?: BN;
+      currentAdminMintCount?: BN;
     };
   }>
 ): Promise<void> => {
@@ -306,6 +315,12 @@ export const assertAdminState = async (
     if (expectedValues.ogCollection.currentReservedCount !== undefined) {
       expect(adminState.ogCollection.currentReservedCount.toString()).to.equal(expectedValues.ogCollection.currentReservedCount.toString());
     }
+    if (expectedValues.ogCollection.adminMintLimit !== undefined) {
+      expect(adminState.ogCollection.adminMintLimit.toString()).to.equal(expectedValues.ogCollection.adminMintLimit.toString());
+    }
+    if (expectedValues.ogCollection.currentAdminMintCount !== undefined) {
+      expect(adminState.ogCollection.currentAdminMintCount.toString()).to.equal(expectedValues.ogCollection.currentAdminMintCount.toString());
+    }
   }
   if (expectedValues.regularCollection) {
     if (expectedValues.regularCollection.collectionMint) {
@@ -320,6 +335,12 @@ export const assertAdminState = async (
     if (expectedValues.regularCollection.currentReservedCount !== undefined) {
       expect(adminState.regularCollection.currentReservedCount.toString()).to.equal(expectedValues.regularCollection.currentReservedCount.toString());
     }
+    if (expectedValues.regularCollection.adminMintLimit !== undefined) {
+      expect(adminState.regularCollection.adminMintLimit.toString()).to.equal(expectedValues.regularCollection.adminMintLimit.toString());
+    }
+    if (expectedValues.regularCollection.currentAdminMintCount !== undefined) {
+      expect(adminState.regularCollection.currentAdminMintCount.toString()).to.equal(expectedValues.regularCollection.currentAdminMintCount.toString());
+    }
   }
   if (expectedValues.basicCollection) {
     if (expectedValues.basicCollection.collectionMint) {
@@ -333,6 +354,12 @@ export const assertAdminState = async (
     }
     if (expectedValues.basicCollection.currentReservedCount !== undefined) {
       expect(adminState.basicCollection.currentReservedCount.toString()).to.equal(expectedValues.basicCollection.currentReservedCount.toString());
+    }
+    if (expectedValues.basicCollection.adminMintLimit !== undefined) {
+      expect(adminState.basicCollection.adminMintLimit.toString()).to.equal(expectedValues.basicCollection.adminMintLimit.toString());
+    }
+    if (expectedValues.basicCollection.currentAdminMintCount !== undefined) {
+      expect(adminState.basicCollection.currentAdminMintCount.toString()).to.equal(expectedValues.basicCollection.currentAdminMintCount.toString());
     }
   }
 };

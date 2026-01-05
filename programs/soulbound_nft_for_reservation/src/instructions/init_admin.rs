@@ -51,16 +51,19 @@ pub fn handler(
     og_collection_mint: Pubkey,
     og_mint_fee: u64,
     og_max_supply: u64,
+    og_admin_mint_limit: u64,
     // Regular Collection parameters
     regular_collection_mint: Pubkey,
     regular_mint_fee: u64,
     regular_max_supply: u64,
+    regular_admin_mint_limit: u64,
     // Basic Collection parameters
     basic_collection_mint: Pubkey,
     basic_mint_fee: u64,
     basic_max_supply: u64,
+    basic_admin_mint_limit: u64,
     // Shared parameters
-    withdraw_wallet: Pubkey, 
+    withdraw_wallet: Pubkey,
     mint_start_date: i64,
 ) -> Result<()> {
     let super_admin_key = *ctx.accounts.super_admin.key;
@@ -91,29 +94,32 @@ pub fn handler(
     ctx.accounts.admin_state.og_collection = crate::state::CollectionConfig::new(
         og_collection_mint,
         og_mint_fee,
-        og_max_supply
+        og_max_supply,
+        og_admin_mint_limit
     );
 
     // Initialize Regular Collection
     ctx.accounts.admin_state.regular_collection = crate::state::CollectionConfig::new(
         regular_collection_mint,
         regular_mint_fee,
-        regular_max_supply
+        regular_max_supply,
+        regular_admin_mint_limit
     );
 
     // Initialize Basic Collection
     ctx.accounts.admin_state.basic_collection = crate::state::CollectionConfig::new(
         basic_collection_mint,
         basic_mint_fee,
-        basic_max_supply
+        basic_max_supply,
+        basic_admin_mint_limit
     );
 
     msg!("Admin initialized with vault at: {}", ctx.accounts.vault.key());
     msg!("Super admin: {}", super_admin_key);
     msg!("Withdraw wallet: {}, mint_start_date: {}", withdraw_wallet, mint_start_date);
-    msg!("OG Collection: {}, fee: {}, max_supply: {}", og_collection_mint, og_mint_fee, og_max_supply);
-    msg!("Regular Collection: {}, fee: {}, max_supply: {}", regular_collection_mint, regular_mint_fee, regular_max_supply);
-    msg!("Basic Collection: {}, fee: {}, max_supply: {}", basic_collection_mint, basic_mint_fee, basic_max_supply);
+    msg!("OG Collection: {}, fee: {}, max_supply: {}, admin_limit: {}", og_collection_mint, og_mint_fee, og_max_supply, og_admin_mint_limit);
+    msg!("Regular Collection: {}, fee: {}, max_supply: {}, admin_limit: {}", regular_collection_mint, regular_mint_fee, regular_max_supply, regular_admin_mint_limit);
+    msg!("Basic Collection: {}, fee: {}, max_supply: {}, admin_limit: {}", basic_collection_mint, basic_mint_fee, basic_max_supply, basic_admin_mint_limit);
 
     Ok(())
 }

@@ -241,6 +241,13 @@ pub fn handler(ctx: Context<AdminMintNft>, collection_type: crate::state::Collec
         );
     }
 
+    // Check admin mint limit (0 = admin cannot mint any NFTs)
+    let admin_mint_limit = collection_config.admin_mint_limit;
+    require!(
+        collection_config.current_admin_mint_count < admin_mint_limit,
+        ProgramErrorCode::AdminMintLimitReached
+    );
+
     let bump = ctx.bumps.admin_state;
     let signer_seeds: &[&[&[u8]]] = &[&[b"admin_state", &[bump]]];
 
@@ -350,10 +357,17 @@ pub fn handler(ctx: Context<AdminMintNft>, collection_type: crate::state::Collec
         .checked_add(1)
         .ok_or(ProgramErrorCode::ReservedCountOverflow)?;
 
+    // Increment admin mint count for the specific collection
+    collection_config_mut.current_admin_mint_count = collection_config_mut
+        .current_admin_mint_count
+        .checked_add(1)
+        .ok_or(ProgramErrorCode::ReservedCountOverflow)?;
+
     msg!(
-        "Collection {:?} - Current reserved count: {}",
+        "Collection {:?} - Current reserved count: {}, Current admin mint count: {}",
         collection_type,
-        collection_config_mut.current_reserved_count
+        collection_config_mut.current_reserved_count,
+        collection_config_mut.current_admin_mint_count
     );
 
     // Emit event

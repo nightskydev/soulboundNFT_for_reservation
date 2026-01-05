@@ -26,6 +26,8 @@ pub enum ProgramErrorCode {
     InsufficientVaultBalance,
     #[msg("Max supply reached - no more NFTs can be minted")]
     MaxSupplyReached,
+    #[msg("Admin mint limit reached - admin cannot mint more NFTs for this collection")]
+    AdminMintLimitReached,
     #[msg("Invalid withdraw wallet - cannot be empty")]
     InvalidWithdrawWallet,
     #[msg("Minting has not started yet")]

@@ -9,19 +9,23 @@ pub enum CollectionType {
 
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, Debug)]
 pub struct CollectionConfig {
-    pub collection_mint: Pubkey,      // Collection mint address
-    pub mint_fee: u64,                // Fee to mint NFT in this collection
-    pub max_supply: u64,              // Maximum supply (0 = unlimited)
-    pub current_reserved_count: u64,  // Current minted count
+    pub collection_mint: Pubkey,         // Collection mint address
+    pub mint_fee: u64,                   // Fee to mint NFT in this collection
+    pub max_supply: u64,                 // Maximum supply (0 = unlimited)
+    pub current_reserved_count: u64,     // Current minted count
+    pub admin_mint_limit: u64,           // Maximum NFTs admin can mint (0 = admin cannot mint)
+    pub current_admin_mint_count: u64,   // Current admin minted count
 }
 
 impl CollectionConfig {
-    pub fn new(collection_mint: Pubkey, mint_fee: u64, max_supply: u64) -> Self {
+    pub fn new(collection_mint: Pubkey, mint_fee: u64, max_supply: u64, admin_mint_limit: u64) -> Self {
         Self {
             collection_mint,
             mint_fee,
             max_supply,
             current_reserved_count: 0,
+            admin_mint_limit,
+            current_admin_mint_count: 0,
         }
     }
 
@@ -29,7 +33,9 @@ impl CollectionConfig {
         32 +        // collection_mint
         8 +         // mint_fee
         8 +         // max_supply
-        8           // current_reserved_count
+        8 +         // current_reserved_count
+        8 +         // admin_mint_limit
+        8           // current_admin_mint_count
     }
 }
 
