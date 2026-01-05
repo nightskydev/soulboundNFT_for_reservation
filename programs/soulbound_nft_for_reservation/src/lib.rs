@@ -4,10 +4,8 @@ use anchor_lang::prelude::*;
 
 pub mod error;
 pub mod state;
-pub mod utils;
 pub mod instructions;
 
-pub use utils::*;
 pub use instructions::*;
 
 pub use crate::error::ProgramErrorCode;
@@ -59,6 +57,11 @@ pub mod soulbound_nft_for_reservation {
         instructions::update_admin::update_max_supply_handler(ctx, collection_type, max_supply)
     }
 
+    /// Update admin mint limit for a specific collection (super_admin only)
+    pub fn update_admin_mint_limit(ctx: Context<UpdateAdminInfo>, collection_type: state::CollectionType, admin_mint_limit: u64) -> Result<()> {
+        instructions::update_admin::update_admin_mint_limit_handler(ctx, collection_type, admin_mint_limit)
+    }
+
     /// Update mint start date - shared across all collections (super_admin only)
     pub fn update_mint_start_date(ctx: Context<UpdateAdminInfo>, mint_start_date: i64) -> Result<()> {
         instructions::update_admin::update_mint_start_date_handler(ctx, mint_start_date)
@@ -103,9 +106,9 @@ pub mod soulbound_nft_for_reservation {
         instructions::update_nft_metadata::handler(ctx, name, symbol, uri)
     }
 
-    /// Burn an NFT from a specific collection
-    pub fn burn_nft(ctx: Context<BurnNft>, collection_type: state::CollectionType) -> Result<()> {
-        instructions::burn_nft::handler(ctx, collection_type)
+    /// Burn an NFT - collection type is determined from user state
+    pub fn burn_nft(ctx: Context<BurnNft>) -> Result<()> {
+        instructions::burn_nft::handler(ctx)
     }
 
     /// Withdraw payment tokens from the vault (super_admin only)

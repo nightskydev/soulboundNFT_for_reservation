@@ -433,16 +433,28 @@ describe("burn_nft", () => {
       burnOgUser.keypair.publicKey
     );
 
+    // Derive user state PDA
+    const [userStatePda] = PublicKey.findProgramAddressSync(
+      [Buffer.from("user_state"), burnOgUser.keypair.publicKey.toBuffer()],
+      testContext.program.programId
+    );
+
+    // Check user state before burn
+    const userStateBefore = await testContext.program.account.userState.fetch(userStatePda);
+    expect(userStateBefore.hasMinted).to.be.true;
+    expect(userStateBefore.mintAddress.toBase58()).to.equal(burnOgNftMint.publicKey.toBase58());
+
     // Get OG collection count before
     const adminStateBefore = await testContext.fetchAdminState();
     const ogCountBefore = adminStateBefore.ogCollection.currentReservedCount.toNumber();
 
     await testContext.program.methods
-      .burnNft({ og: {} })
+      .burnNft()
       .accounts({
         signer: burnOgUser.keypair.publicKey,
         oldTokenAccount: nftTokenAccount,
         oldMint: burnOgNftMint.publicKey,
+        userState: userStatePda,
         metadataAccount: null,
       })
       .signers([burnOgUser.keypair])
@@ -459,6 +471,12 @@ describe("burn_nft", () => {
     expect(adminStateAfter.basicCollection.currentReservedCount.toNumber()).to.equal(
       adminStateBefore.basicCollection.currentReservedCount.toNumber()
     );
+
+    // Verify user state was reset
+    const userStateAfter = await testContext.program.account.userState.fetch(userStatePda);
+    expect(userStateAfter.hasMinted).to.be.false;
+    expect(userStateAfter.mintAddress.toBase58()).to.equal(PublicKey.default.toBase58());
+    expect(userStateAfter.mintedAt.toNumber()).to.equal(0);
   });
 
   it("should burn Regular NFT successfully", async () => {
@@ -467,16 +485,28 @@ describe("burn_nft", () => {
       burnRegularUser.keypair.publicKey
     );
 
+    // Derive user state PDA
+    const [userStatePda] = PublicKey.findProgramAddressSync(
+      [Buffer.from("user_state"), burnRegularUser.keypair.publicKey.toBuffer()],
+      testContext.program.programId
+    );
+
+    // Check user state before burn
+    const userStateBefore = await testContext.program.account.userState.fetch(userStatePda);
+    expect(userStateBefore.hasMinted).to.be.true;
+    expect(userStateBefore.mintAddress.toBase58()).to.equal(burnRegularNftMint.publicKey.toBase58());
+
     // Get Regular collection count before
     const adminStateBefore = await testContext.fetchAdminState();
     const regularCountBefore = adminStateBefore.regularCollection.currentReservedCount.toNumber();
 
     await testContext.program.methods
-      .burnNft({ regular: {} })
+      .burnNft()
       .accounts({
         signer: burnRegularUser.keypair.publicKey,
         oldTokenAccount: nftTokenAccount,
         oldMint: burnRegularNftMint.publicKey,
+        userState: userStatePda,
         metadataAccount: null,
       })
       .signers([burnRegularUser.keypair])
@@ -485,6 +515,12 @@ describe("burn_nft", () => {
     // Verify Regular collection count decreased
     const adminStateAfter = await testContext.fetchAdminState();
     expect(adminStateAfter.regularCollection.currentReservedCount.toNumber()).to.equal(regularCountBefore - 1);
+
+    // Verify user state was reset
+    const userStateAfter = await testContext.program.account.userState.fetch(userStatePda);
+    expect(userStateAfter.hasMinted).to.be.false;
+    expect(userStateAfter.mintAddress.toBase58()).to.equal(PublicKey.default.toBase58());
+    expect(userStateAfter.mintedAt.toNumber()).to.equal(0);
   });
 
   it("should burn Basic NFT successfully", async () => {
@@ -493,16 +529,28 @@ describe("burn_nft", () => {
       burnBasicUser.keypair.publicKey
     );
 
+    // Derive user state PDA
+    const [userStatePda] = PublicKey.findProgramAddressSync(
+      [Buffer.from("user_state"), burnBasicUser.keypair.publicKey.toBuffer()],
+      testContext.program.programId
+    );
+
+    // Check user state before burn
+    const userStateBefore = await testContext.program.account.userState.fetch(userStatePda);
+    expect(userStateBefore.hasMinted).to.be.true;
+    expect(userStateBefore.mintAddress.toBase58()).to.equal(burnBasicNftMint.publicKey.toBase58());
+
     // Get Basic collection count before
     const adminStateBefore = await testContext.fetchAdminState();
     const basicCountBefore = adminStateBefore.basicCollection.currentReservedCount.toNumber();
 
     await testContext.program.methods
-      .burnNft({ basic: {} })
+      .burnNft()
       .accounts({
         signer: burnBasicUser.keypair.publicKey,
         oldTokenAccount: nftTokenAccount,
         oldMint: burnBasicNftMint.publicKey,
+        userState: userStatePda,
         metadataAccount: null,
       })
       .signers([burnBasicUser.keypair])
@@ -511,6 +559,141 @@ describe("burn_nft", () => {
     // Verify Basic collection count decreased
     const adminStateAfter = await testContext.fetchAdminState();
     expect(adminStateAfter.basicCollection.currentReservedCount.toNumber()).to.equal(basicCountBefore - 1);
+
+    // Verify user state was reset
+    const userStateAfter = await testContext.program.account.userState.fetch(userStatePda);
+    expect(userStateAfter.hasMinted).to.be.false;
+    expect(userStateAfter.mintAddress.toBase58()).to.equal(PublicKey.default.toBase58());
+    expect(userStateAfter.mintedAt.toNumber()).to.equal(0);
+  });
+
+  it("should allow user to mint again after burning", async () => {
+    // Create a new test user
+    const testUser = Keypair.generate();
+    await testContext.airdropSol(testUser.publicKey, 5);
+    const testUserTokenAccount = await createAssociatedTokenAccount(
+      testContext.provider.connection,
+      testContext.admin,
+      testContext.usdcMint,
+      testUser.publicKey
+    );
+    
+    await mintTo(
+      testContext.provider.connection,
+      testContext.admin,
+      testContext.usdcMint,
+      testUserTokenAccount,
+      testContext.admin,
+      20_000_000 // 20 USDC (enough for 2 mints)
+    );
+
+    const modifyComputeUnits = ComputeBudgetProgram.setComputeUnitLimit({
+      units: 400_000,
+    });
+
+    // First mint
+    const firstMint = Keypair.generate();
+    const firstNftTokenAccount = getAssociatedTokenAddressSync(
+      firstMint.publicKey,
+      testUser.publicKey
+    );
+    const [firstMetadataAccount] = PublicKey.findProgramAddressSync(
+      [Buffer.from("metadata"), METAPLEX_PROGRAM_ID.toBuffer(), firstMint.publicKey.toBuffer()],
+      METAPLEX_PROGRAM_ID
+    );
+    const [basicCollectionMetadata] = PublicKey.findProgramAddressSync(
+      [Buffer.from("metadata"), METAPLEX_PROGRAM_ID.toBuffer(), testContext.basicCollectionMint!.toBuffer()],
+      METAPLEX_PROGRAM_ID
+    );
+    const [basicCollectionMasterEdition] = PublicKey.findProgramAddressSync(
+      [Buffer.from("metadata"), METAPLEX_PROGRAM_ID.toBuffer(), testContext.basicCollectionMint!.toBuffer(), Buffer.from("edition")],
+      METAPLEX_PROGRAM_ID
+    );
+
+    await testContext.program.methods
+      .mintNft({ basic: {} }, "First Mint", "FIRST", "https://example.com/first.json")
+      .accounts({
+        signer: testUser.publicKey,
+        tokenAccount: firstNftTokenAccount,
+        mint: firstMint.publicKey,
+        metadataAccount: firstMetadataAccount,
+        paymentMint: testContext.usdcMint,
+        payerTokenAccount: testUserTokenAccount,
+        paymentTokenProgram: TOKEN_PROGRAM_ID,
+        collectionMint: testContext.basicCollectionMint,
+        collectionMetadata: basicCollectionMetadata,
+        collectionMasterEdition: basicCollectionMasterEdition,
+        sysvarInstructions: SYSVAR_INSTRUCTIONS_PUBKEY,
+      })
+      .preInstructions([modifyComputeUnits])
+      .signers([testUser, firstMint])
+      .rpc();
+
+    // Derive user state PDA
+    const [userStatePda] = PublicKey.findProgramAddressSync(
+      [Buffer.from("user_state"), testUser.publicKey.toBuffer()],
+      testContext.program.programId
+    );
+
+    // Verify user state after first mint
+    let userState = await testContext.program.account.userState.fetch(userStatePda);
+    expect(userState.hasMinted).to.be.true;
+    expect(userState.mintAddress.toBase58()).to.equal(firstMint.publicKey.toBase58());
+
+    // Burn the first NFT
+    await testContext.program.methods
+      .burnNft()
+      .accounts({
+        signer: testUser.publicKey,
+        oldTokenAccount: firstNftTokenAccount,
+        oldMint: firstMint.publicKey,
+        userState: userStatePda,
+        metadataAccount: null,
+      })
+      .signers([testUser])
+      .rpc();
+
+    // Verify user state was reset after burn
+    userState = await testContext.program.account.userState.fetch(userStatePda);
+    expect(userState.hasMinted).to.be.false;
+    expect(userState.mintAddress.toBase58()).to.equal(PublicKey.default.toBase58());
+
+    // Second mint (this should succeed now that UserState was reset)
+    const secondMint = Keypair.generate();
+    const secondNftTokenAccount = getAssociatedTokenAddressSync(
+      secondMint.publicKey,
+      testUser.publicKey
+    );
+    const [secondMetadataAccount] = PublicKey.findProgramAddressSync(
+      [Buffer.from("metadata"), METAPLEX_PROGRAM_ID.toBuffer(), secondMint.publicKey.toBuffer()],
+      METAPLEX_PROGRAM_ID
+    );
+
+    await testContext.program.methods
+      .mintNft({ basic: {} }, "Second Mint", "SECOND", "https://example.com/second.json")
+      .accounts({
+        signer: testUser.publicKey,
+        tokenAccount: secondNftTokenAccount,
+        mint: secondMint.publicKey,
+        metadataAccount: secondMetadataAccount,
+        paymentMint: testContext.usdcMint,
+        payerTokenAccount: testUserTokenAccount,
+        paymentTokenProgram: TOKEN_PROGRAM_ID,
+        collectionMint: testContext.basicCollectionMint,
+        collectionMetadata: basicCollectionMetadata,
+        collectionMasterEdition: basicCollectionMasterEdition,
+        sysvarInstructions: SYSVAR_INSTRUCTIONS_PUBKEY,
+      })
+      .preInstructions([modifyComputeUnits])
+      .signers([testUser, secondMint])
+      .rpc();
+
+    // Verify user state after second mint
+    userState = await testContext.program.account.userState.fetch(userStatePda);
+    expect(userState.hasMinted).to.be.true;
+    expect(userState.mintAddress.toBase58()).to.equal(secondMint.publicKey.toBase58());
+
+    console.log("✅ User successfully minted again after burning!");
   });
 
   it("should fail with invalid token account", async () => {
@@ -580,13 +763,20 @@ describe("burn_nft", () => {
       testContext.admin.publicKey // Wrong owner
     );
 
+    // Derive user state PDA for test user
+    const [testUserStatePda] = PublicKey.findProgramAddressSync(
+      [Buffer.from("user_state"), testKeypair.publicKey.toBuffer()],
+      testContext.program.programId
+    );
+
     try {
       await testContext.program.methods
-        .burnNft({ basic: {} })
+        .burnNft()
         .accounts({
           signer: testKeypair.publicKey,
           oldTokenAccount: wrongTokenAccount,
           oldMint: testUserNftMint.publicKey,
+          userState: testUserStatePda,
           metadataAccount: null,
         })
         .signers([testKeypair])

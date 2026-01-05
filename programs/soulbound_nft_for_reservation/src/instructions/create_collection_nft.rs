@@ -10,6 +10,7 @@ use mpl_token_metadata::{
 use solana_program::program::invoke_signed;
 
 use crate::state::*;
+use crate::error::ProgramErrorCode;
 
 // Event definition
 #[event]
@@ -23,7 +24,11 @@ pub struct CreateCollectionEvent {
 
 #[derive(Accounts)]
 pub struct CreateCollectionNft<'info> {
-    #[account(mut)]
+    /// Only super_admin can create collection NFTs
+    #[account(
+        mut,
+        constraint = signer.key() == admin_state.super_admin @ ProgramErrorCode::Unauthorized
+    )]
     pub signer: Signer<'info>,
     pub system_program: Program<'info, System>,
     pub token_program: Program<'info, Token>,

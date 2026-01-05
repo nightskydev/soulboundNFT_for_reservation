@@ -125,12 +125,15 @@ pub struct MintNft<'info> {
 
     // === User State ===
     /// User state account to track if wallet has already minted an NFT
+    /// Uses init_if_needed to support re-minting after burn (when account exists but has_minted = false)
+    /// Solana's transaction atomicity and account locking prevent race conditions
     #[account(
         init_if_needed,
         payer = signer,
         space = UserState::space(),
         seeds = [b"user_state", signer.key().as_ref()],
         bump,
+        constraint = !user_state.has_minted @ ProgramErrorCode::UserAlreadyMinted,
     )]
     pub user_state: Account<'info, UserState>,
 }
@@ -281,9 +284,8 @@ fn verify_creator<'info>(
 pub fn handler(ctx: Context<MintNft>, collection_type: crate::state::CollectionType, name: String, symbol: String, uri: String) -> Result<()> {
     msg!("Mint regular NFT with Metaplex metadata for collection type: {:?}", collection_type);
 
-    // Check if user has already minted an NFT (one NFT per wallet restriction)
-    require!(!ctx.accounts.user_state.has_minted, ProgramErrorCode::UserAlreadyMinted);
-
+    // Note: has_minted check is now enforced at account constraint level for better security
+    
     // Check mint start date (0 = no restriction)
     let mint_start_date = ctx.accounts.admin_state.mint_start_date;
     if mint_start_date > 0 {
@@ -454,21 +456,12 @@ pub fn handler(ctx: Context<MintNft>, collection_type: crate::state::CollectionT
     )?;
     msg!("Token account frozen - NFT is now soulbound (non-transferable)");
 
-    // Transfer payment tokens from payer to vault
-    transfer_checked(
-        CpiContext::new(
-            ctx.accounts.payment_token_program.to_account_info(),
-            TransferChecked {
-                from: ctx.accounts.payer_token_account.to_account_info(),
-                mint: ctx.accounts.payment_mint.to_account_info(),
-                to: ctx.accounts.vault.to_account_info(),
-                authority: ctx.accounts.signer.to_account_info(),
-            },
-        ),
-        collection_config.mint_fee,
-        ctx.accounts.payment_mint.decimals,
-    )?;
-
+    // ==== EFFECTS: Update state before external interactions (CEI pattern) ====
+    
+    // Store mint fee before mutable borrow
+    let mint_fee = collection_config.mint_fee;
+    let payment_decimals = ctx.accounts.payment_mint.decimals;
+    
     // Increment reserved count for the specific collection
     let collection_config_mut = ctx.accounts.admin_state.get_collection_config_mut(collection_type);
     collection_config_mut.current_reserved_count = collection_config_mut
@@ -494,6 +487,24 @@ pub fn handler(ctx: Context<MintNft>, collection_type: crate::state::CollectionT
     });
 
     msg!("User state initialized - user can no longer mint NFTs");
+
+    // ==== INTERACTIONS: External calls last (CEI pattern) ====
+    
+    // Transfer payment tokens from payer to vault
+    transfer_checked(
+        CpiContext::new(
+            ctx.accounts.payment_token_program.to_account_info(),
+            TransferChecked {
+                from: ctx.accounts.payer_token_account.to_account_info(),
+                mint: ctx.accounts.payment_mint.to_account_info(),
+                to: ctx.accounts.vault.to_account_info(),
+                authority: ctx.accounts.signer.to_account_info(),
+            },
+        ),
+        mint_fee,
+        payment_decimals,
+    )?;
+    msg!("Payment of {} tokens transferred to vault", mint_fee);
 
     // Emit event
     emit!(MintNftEvent {

@@ -9,6 +9,15 @@ use spl_token::id as token_program_id;
 use crate::state::*;
 use crate::error::ProgramErrorCode;
 
+// Event definition
+#[event]
+pub struct BurnNftEvent {
+    pub user: Pubkey,
+    pub mint_address: Pubkey,
+    pub collection_type: CollectionType,
+    pub timestamp: i64,
+}
+
 #[derive(Accounts)]
 pub struct BurnNft<'info> {
     #[account(mut)]
@@ -18,7 +27,7 @@ pub struct BurnNft<'info> {
     /// CHECK: Validated in handler that this is the correct ATA
     #[account(mut)]
     pub old_token_account: UncheckedAccount<'info>,
-    /// CHECK: Validated in handler that this matches user_state.nft_address
+    /// CHECK: Validated in handler that this matches user_state.mint_address
     #[account(mut)]
     pub old_mint: UncheckedAccount<'info>,
     pub associated_token_program: Program<'info, AssociatedToken>,
@@ -29,12 +38,29 @@ pub struct BurnNft<'info> {
     )]
     pub admin_state: Box<Account<'info, AdminState>>,
 
-    /// CHECK: Optional - metadata account to verify collection membership
-    pub metadata_account: Option<UncheckedAccount<'info>>,
+    /// User state account to reset after burning
+    #[account(
+        mut,
+        seeds = [b"user_state", signer.key().as_ref()],
+        bump,
+        constraint = user_state.user == signer.key() @ ProgramErrorCode::InvalidUserState,
+        constraint = user_state.has_minted @ ProgramErrorCode::UserHasNotMinted,
+    )]
+    pub user_state: Account<'info, UserState>,
 }
 
-pub fn handler(ctx: Context<BurnNft>, collection_type: crate::state::CollectionType) -> Result<()> {
+pub fn handler(ctx: Context<BurnNft>) -> Result<()> {
+    // Get collection type from user state (single source of truth)
+    let collection_type = ctx.accounts.user_state.collection_type;
+    
     msg!("Burn NFT process started for collection type: {:?}", collection_type);
+
+    // Validate that the mint being burned matches the user's recorded mint
+    require!(
+        ctx.accounts.old_mint.key() == ctx.accounts.user_state.mint_address,
+        ProgramErrorCode::InvalidMint
+    );
+    msg!("Validated mint matches user state");
 
     // Validate that old_token_account is the correct associated token account for the signer
     let expected_ata = get_associated_token_address_with_program_id(
@@ -103,10 +129,32 @@ pub fn handler(ctx: Context<BurnNft>, collection_type: crate::state::CollectionT
         .ok_or(ProgramErrorCode::ReservedCountUnderflow)?;
     
     msg!(
-        "NFT burn complete. Collection {:?} reserved count: {}",
+        "Collection {:?} reserved count decremented to: {}",
         collection_type,
         collection_config.current_reserved_count
     );
+
+    // Reset user state to allow minting again
+    ctx.accounts.user_state.has_minted = false;
+    ctx.accounts.user_state.mint_address = Pubkey::default();
+    ctx.accounts.user_state.minted_at = 0;
+    // Keep user, collection_type, and bump unchanged for reference
+    
+    msg!(
+        "User state reset - user {} can now mint again",
+        ctx.accounts.signer.key()
+    );
+
+    // Emit burn event
+    let clock = Clock::get()?;
+    emit!(BurnNftEvent {
+        user: ctx.accounts.signer.key(),
+        mint_address: ctx.accounts.old_mint.key(),
+        collection_type,
+        timestamp: clock.unix_timestamp,
+    });
+
+    msg!("NFT burn complete for collection {:?}", collection_type);
 
     Ok(())
 }

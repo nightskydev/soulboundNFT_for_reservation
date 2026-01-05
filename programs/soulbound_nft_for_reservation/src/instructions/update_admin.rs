@@ -63,6 +63,23 @@ pub fn update_collection_mint_handler(ctx: Context<UpdateAdminInfo>, collection_
     Ok(())
 }
 
+pub fn update_admin_mint_limit_handler(ctx: Context<UpdateAdminInfo>, collection_type: crate::state::CollectionType, admin_mint_limit: u64) -> Result<()> {
+    let collection_config = ctx.accounts.admin_state.get_collection_config(collection_type);
+    
+    // Validate new limit is >= current admin mint count
+    // This prevents setting a limit below what's already been minted
+    require!(
+        admin_mint_limit >= collection_config.current_admin_mint_count,
+        ProgramErrorCode::InvalidAdminMintLimit
+    );
+    
+    let collection_config_mut = ctx.accounts.admin_state.get_collection_config_mut(collection_type);
+    collection_config_mut.admin_mint_limit = admin_mint_limit;
+    
+    msg!("Collection {:?} admin mint limit updated to: {}", collection_type, admin_mint_limit);
+    Ok(())
+}
+
 pub fn update_super_admin_handler(ctx: Context<UpdateAdminInfo>, new_super_admin: Pubkey) -> Result<()> {
     // Validate that new_super_admin is not empty
     require!(

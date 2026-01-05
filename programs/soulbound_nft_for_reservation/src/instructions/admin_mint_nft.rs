@@ -35,8 +35,17 @@ pub struct AdminMintNft<'info> {
     pub system_program: Program<'info, System>,
     pub token_program: Program<'info, Token>,
 
-    /// CHECK: We will create this one for the recipient
-    #[account(mut)]
+    /// CHECK: Associated token account for recipient - validated by PDA derivation and created via CPI
+    #[account(
+        mut,
+        seeds = [
+            recipient.key().as_ref(),
+            token_program.key().as_ref(),
+            mint.key().as_ref()
+        ],
+        bump,
+        seeds::program = associated_token_program.key()
+    )]
     pub recipient_token_account: UncheckedAccount<'info>,
 
     #[account(
@@ -55,8 +64,17 @@ pub struct AdminMintNft<'info> {
     #[account(address = mpl_token_metadata::ID)]
     pub token_metadata_program: UncheckedAccount<'info>,
 
-    /// CHECK: Metadata account - validated by Metaplex program during CPI
-    #[account(mut)]
+    /// CHECK: Metadata account - validated by PDA derivation and Metaplex program during CPI
+    #[account(
+        mut,
+        seeds = [
+            b"metadata",
+            mpl_token_metadata::ID.as_ref(),
+            mint.key().as_ref()
+        ],
+        bump,
+        seeds::program = mpl_token_metadata::ID
+    )]
     pub metadata_account: UncheckedAccount<'info>,
 
     #[account(
@@ -68,19 +86,33 @@ pub struct AdminMintNft<'info> {
     pub admin_state: Box<Account<'info, AdminState>>,
 
     // === Optional Collection ===
-    /// CHECK: Optional collection mint account for grouping NFTs
-    pub collection_mint: Option<UncheckedAccount<'info>>,
+    /// Optional collection mint account for grouping NFTs - validated in handler
+    pub collection_mint: Option<Box<Account<'info, Mint>>>,
 
-    /// CHECK: Optional collection metadata account - required if collection_mint is provided
+    /// CHECK: Optional collection metadata account - validated by PDA derivation in handler if provided
     #[account(mut)]
     pub collection_metadata: Option<UncheckedAccount<'info>>,
 
-    /// CHECK: Optional collection master edition account - required if collection_mint is provided
+    /// CHECK: Optional collection master edition account - validated by PDA derivation in handler if provided
     pub collection_master_edition: Option<UncheckedAccount<'info>>,
 
     /// CHECK: Sysvar instructions account - required for creator and collection verification
     #[account(address = solana_program::sysvar::instructions::ID)]
     pub sysvar_instructions: UncheckedAccount<'info>,
+
+    // === Recipient User State ===
+    /// User state account for the recipient to track if they have already received/minted an NFT
+    /// Uses init_if_needed to support re-minting after burn (when account exists but has_minted = false)
+    /// Solana's transaction atomicity and account locking prevent race conditions
+    #[account(
+        init_if_needed,
+        payer = admin,
+        space = UserState::space(),
+        seeds = [b"user_state", recipient.key().as_ref()],
+        bump,
+        constraint = !recipient_user_state.has_minted @ ProgramErrorCode::UserAlreadyMinted,
+    )]
+    pub recipient_user_state: Account<'info, UserState>,
 }
 
 #[inline(never)]
@@ -229,6 +261,8 @@ fn verify_creator<'info>(
 pub fn handler(ctx: Context<AdminMintNft>, collection_type: crate::state::CollectionType, name: String, symbol: String, uri: String) -> Result<()> {
     msg!("Admin minting NFT for collection type: {:?} to recipient: {}", collection_type, ctx.accounts.recipient.key());
 
+    // Note: has_minted check is now enforced at account constraint level for better security
+    
     // Get the specific collection configuration
     let collection_config = ctx.accounts.admin_state.get_collection_config(collection_type);
 
@@ -251,16 +285,65 @@ pub fn handler(ctx: Context<AdminMintNft>, collection_type: crate::state::Collec
     let bump = ctx.bumps.admin_state;
     let signer_seeds: &[&[&[u8]]] = &[&[b"admin_state", &[bump]]];
 
-    // Get collection key if provided
-    let collection_key = ctx.accounts.collection_mint.as_ref().map(|m| m.key());
-
-    // Validate that provided collection mint matches the collection type
-    if let Some(provided_collection_mint) = &ctx.accounts.collection_mint {
+    // Validate collection accounts if provided
+    let collection_key = if let Some(collection_mint) = &ctx.accounts.collection_mint {
+        // Validate collection mint properties
         require!(
-            provided_collection_mint.key() == collection_config.collection_mint,
+            collection_mint.key() == collection_config.collection_mint,
             ProgramErrorCode::InvalidCollection
         );
-    }
+        require!(
+            collection_mint.decimals == 0,
+            ProgramErrorCode::InvalidCollectionMint
+        );
+        require!(
+            collection_mint.supply == 1,
+            ProgramErrorCode::InvalidCollectionMint
+        );
+
+        // Validate collection metadata PDA
+        let expected_metadata_key = Pubkey::find_program_address(
+            &[
+                b"metadata",
+                &mpl_token_metadata::ID.as_ref(),
+                &collection_mint.key().as_ref(),
+            ],
+            &mpl_token_metadata::ID,
+        ).0;
+        require!(
+            ctx.accounts.collection_metadata.is_some(),
+            ProgramErrorCode::InvalidCollectionMetadata
+        );
+        let collection_metadata = ctx.accounts.collection_metadata.as_ref().unwrap();
+        require!(
+            collection_metadata.key() == expected_metadata_key,
+            ProgramErrorCode::InvalidCollectionMetadata
+        );
+
+        // Validate collection master edition PDA
+        let expected_master_edition_key = Pubkey::find_program_address(
+            &[
+                b"metadata",
+                &mpl_token_metadata::ID.as_ref(),
+                &collection_mint.key().as_ref(),
+                b"edition",
+            ],
+            &mpl_token_metadata::ID,
+        ).0;
+        require!(
+            ctx.accounts.collection_master_edition.is_some(),
+            ProgramErrorCode::InvalidCollectionMasterEdition
+        );
+        let collection_master_edition = ctx.accounts.collection_master_edition.as_ref().unwrap();
+        require!(
+            collection_master_edition.key() == expected_master_edition_key,
+            ProgramErrorCode::InvalidCollectionMasterEdition
+        );
+
+        Some(collection_mint.key())
+    } else {
+        None
+    };
 
     // Create metadata
     create_nft_metadata(
@@ -370,12 +453,28 @@ pub fn handler(ctx: Context<AdminMintNft>, collection_type: crate::state::Collec
         collection_config_mut.current_admin_mint_count
     );
 
+    // Initialize/update recipient user state to prevent them from minting another NFT
+    let clock = Clock::get()?;
+    ctx.accounts.recipient_user_state.set_inner(UserState {
+        user: ctx.accounts.recipient.key(),
+        has_minted: true,
+        collection_type,
+        mint_address: ctx.accounts.mint.key(),
+        minted_at: clock.unix_timestamp,
+        bump: ctx.bumps.recipient_user_state,
+    });
+
+    msg!(
+        "Recipient user state initialized - recipient {} can no longer mint/receive NFTs",
+        ctx.accounts.recipient.key()
+    );
+
     // Emit event
     emit!(AdminMintNftEvent {
         recipient: ctx.accounts.recipient.key(),
         mint_address: ctx.accounts.mint.key(),
         admin: ctx.accounts.admin.key(),
-        timestamp: Clock::get()?.unix_timestamp,
+        timestamp: clock.unix_timestamp,
     });
 
     Ok(())

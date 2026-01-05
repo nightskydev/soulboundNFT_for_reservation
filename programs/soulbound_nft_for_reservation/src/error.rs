@@ -60,4 +60,12 @@ pub enum ProgramErrorCode {
     InvalidCollectionMasterEdition,
     #[msg("User has already minted an NFT - only one NFT per wallet allowed")]
     UserAlreadyMinted,
+    #[msg("Invalid mint - does not match user's recorded mint address")]
+    InvalidMint,
+    #[msg("User has not minted any NFT yet")]
+    UserHasNotMinted,
+    #[msg("Invalid user state - does not match signer")]
+    InvalidUserState,
+    #[msg("Invalid admin mint limit - cannot be less than current admin mint count")]
+    InvalidAdminMintLimit,
 }
