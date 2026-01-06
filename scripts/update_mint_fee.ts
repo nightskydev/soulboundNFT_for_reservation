@@ -72,7 +72,7 @@ async function main() {
     throw new Error(`IDL not found at ${idlPath}. Please run 'anchor build' first.`);
   }
   const idl = JSON.parse(fs.readFileSync(idlPath, "utf-8"));
-  const programId = new PublicKey("AzcZ8LcBKu1tT8ahYYqVTbUpfaonJmkGFNnPajYKSW9L");
+  const programId = new PublicKey("Ca8PS65mtseoGEsJpVbAbrXuTUamU9moSGSonVTtpnHt");
   const program = new Program<SoulboundNftForReservation>(idl, provider);
 
   console.log("Program ID:", programId.toBase58());

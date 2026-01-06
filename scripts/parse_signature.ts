@@ -5,7 +5,7 @@ import { Connection, PublicKey, clusterApiUrl, ParsedTransactionWithMeta } from 
 // ============================================================
 
 // Program ID for the soulbound NFT contract
-const PROGRAM_ID = new PublicKey("AzcZ8LcBKu1tT8ahYYqVTbUpfaonJmkGFNnPajYKSW9L");
+const PROGRAM_ID = new PublicKey("Ca8PS65mtseoGEsJpVbAbrXuTUamU9moSGSonVTtpnHt");
 
 // Network to query (mainnet-beta, devnet, testnet)
 const NETWORK: "mainnet-beta" | "devnet" | "testnet" = "devnet";
