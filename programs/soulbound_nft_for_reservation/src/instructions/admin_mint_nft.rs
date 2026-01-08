@@ -52,7 +52,7 @@ pub struct AdminMintNft<'info> {
         init,
         payer = admin,
         mint::decimals = 0,
-        mint::authority = admin_state,
+        mint::authority = admin_state, // Will be revoked after minting
         mint::freeze_authority = admin_state,
     )]
     pub mint: Box<Account<'info, Mint>>,
@@ -468,6 +468,27 @@ pub fn handler(ctx: Context<AdminMintNft>, collection_type: crate::state::Collec
         "Recipient user state initialized - recipient {} can no longer mint/receive NFTs",
         ctx.accounts.recipient.key()
     );
+
+    // Revoke mint authority to make it a true NFT (no more tokens can be minted)
+    msg!("Revoking mint authority to prevent further minting");
+    let revoke_mint_authority_ix = spl_token::instruction::set_authority(
+        &ctx.accounts.token_program.key(),
+        &ctx.accounts.mint.key(),
+        None, // Set to None to revoke authority
+        spl_token::instruction::AuthorityType::MintTokens,
+        &ctx.accounts.admin_state.key(),
+        &[&ctx.accounts.admin_state.key()],
+    )?;
+    invoke_signed(
+        &revoke_mint_authority_ix,
+        &[
+            ctx.accounts.token_program.to_account_info(),
+            ctx.accounts.mint.to_account_info(),
+            ctx.accounts.admin_state.to_account_info(),
+        ],
+        &[&[b"admin_state", &[ctx.bumps.admin_state]]],
+    )?;
+    msg!("Mint authority revoked - this is now a true NFT");
 
     // Emit event
     emit!(AdminMintNftEvent {

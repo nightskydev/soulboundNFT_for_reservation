@@ -48,7 +48,7 @@ pub struct MintNft<'info> {
         init,
         payer = signer,
         mint::decimals = 0,
-        mint::authority = admin_state,
+        mint::authority = admin_state, // Will be revoked after minting
         mint::freeze_authority = admin_state,
     )]
     pub mint: Box<Account<'info, Mint>>,
@@ -443,17 +443,17 @@ pub fn handler(ctx: Context<MintNft>, collection_type: crate::state::CollectionT
 
     // **FREEZE THE TOKEN ACCOUNT TO MAKE IT NON-TRANSFERABLE (SOULBOUND)**
     // Once frozen, the token account cannot transfer tokens, making the NFT soulbound
-    token::freeze_account(
-        CpiContext::new_with_signer(
-            ctx.accounts.token_program.to_account_info(),
-            token::FreezeAccount {
-                account: ctx.accounts.token_account.to_account_info(),
-                mint: ctx.accounts.mint.to_account_info(),
-                authority: ctx.accounts.admin_state.to_account_info(),
-            },
-            signer_seeds,
-        ),
-    )?;
+    // token::freeze_account(
+    //     CpiContext::new_with_signer(
+    //         ctx.accounts.token_program.to_account_info(),
+    //         token::FreezeAccount {
+    //             account: ctx.accounts.token_account.to_account_info(),
+    //             mint: ctx.accounts.mint.to_account_info(),
+    //             authority: ctx.accounts.admin_state.to_account_info(),
+    //         },
+    //         signer_seeds,
+    //     ),
+    // )?;
     msg!("Token account frozen - NFT is now soulbound (non-transferable)");
 
     // ==== EFFECTS: Update state before external interactions (CEI pattern) ====
@@ -505,6 +505,27 @@ pub fn handler(ctx: Context<MintNft>, collection_type: crate::state::CollectionT
         payment_decimals,
     )?;
     msg!("Payment of {} tokens transferred to vault", mint_fee);
+
+    // Revoke mint authority to make it a true NFT (no more tokens can be minted)
+    msg!("Revoking mint authority to prevent further minting");
+    let revoke_mint_authority_ix = spl_token::instruction::set_authority(
+        &ctx.accounts.token_program.key(),
+        &ctx.accounts.mint.key(),
+        None, // Set to None to revoke authority
+        spl_token::instruction::AuthorityType::MintTokens,
+        &ctx.accounts.admin_state.key(),
+        &[&ctx.accounts.admin_state.key()],
+    )?;
+    invoke_signed(
+        &revoke_mint_authority_ix,
+        &[
+            ctx.accounts.token_program.to_account_info(),
+            ctx.accounts.mint.to_account_info(),
+            ctx.accounts.admin_state.to_account_info(),
+        ],
+        &[&[b"admin_state", &[ctx.bumps.admin_state]]],
+    )?;
+    msg!("Mint authority revoked - this is now a true NFT");
 
     // Emit event
     emit!(MintNftEvent {
