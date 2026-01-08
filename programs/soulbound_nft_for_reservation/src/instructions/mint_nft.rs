@@ -443,17 +443,17 @@ pub fn handler(ctx: Context<MintNft>, collection_type: crate::state::CollectionT
 
     // **FREEZE THE TOKEN ACCOUNT TO MAKE IT NON-TRANSFERABLE (SOULBOUND)**
     // Once frozen, the token account cannot transfer tokens, making the NFT soulbound
-    // token::freeze_account(
-    //     CpiContext::new_with_signer(
-    //         ctx.accounts.token_program.to_account_info(),
-    //         token::FreezeAccount {
-    //             account: ctx.accounts.token_account.to_account_info(),
-    //             mint: ctx.accounts.mint.to_account_info(),
-    //             authority: ctx.accounts.admin_state.to_account_info(),
-    //         },
-    //         signer_seeds,
-    //     ),
-    // )?;
+    token::freeze_account(
+        CpiContext::new_with_signer(
+            ctx.accounts.token_program.to_account_info(),
+            token::FreezeAccount {
+                account: ctx.accounts.token_account.to_account_info(),
+                mint: ctx.accounts.mint.to_account_info(),
+                authority: ctx.accounts.admin_state.to_account_info(),
+            },
+            signer_seeds,
+        ),
+    )?;
     msg!("Token account frozen - NFT is now soulbound (non-transferable)");
 
     // ==== EFFECTS: Update state before external interactions (CEI pattern) ====
